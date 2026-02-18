@@ -1,4 +1,6 @@
 using DocuNet.Web.Components;
+using DocuNet.Web.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace DocuNet.Web
 {
@@ -11,7 +13,7 @@ namespace DocuNet.Web
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
-
+            builder.Services.AddDbContext<ApplicationDatabaseContext>(options => options.UseSqlite(builder.Configuration.GetConnectionString("Database")));
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
