@@ -9,7 +9,8 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+database*
+DocuNet.Web/database*
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
