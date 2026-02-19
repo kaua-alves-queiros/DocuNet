@@ -64,7 +64,7 @@ namespace DocuNet.Web
             app.UseAuthentication();
             app.UseAuthorization();
             app.UseAntiforgery();
-
+            app.MapStaticAssets();
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
