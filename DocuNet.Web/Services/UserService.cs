@@ -192,5 +192,77 @@ namespace DocuNet.Web.Services
             logger.LogInformation("Usuário {UserId} habilitado com sucesso.", dto.UserId);
             return new ServiceResultDto<bool>(true, true, "Usuário habilitado com sucesso.");
         }
+
+        public async Task<ServiceResultDto<bool>> ChangePasswordAsync(ChangePasswordDto dto)
+        {
+            logger.LogInformation("Solicitação de alteração de senha para {Email} solicitada por {RequesterId}", dto.Email, dto.RequesterId);
+
+            // 1. Validação do DTO
+            var validationContext = new ValidationContext(dto);
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(dto, validationContext, validationResults, true))
+            {
+                var errors = string.Join(" ", validationResults.Select(r => r.ErrorMessage));
+                return new ServiceResultDto<bool>(false, false, $"Dados inválidos: {errors}");
+            }
+
+            // 2. Buscar Solicitante e validar se está ativo
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                logger.LogWarning("Solicitante {RequesterId} não encontrado ou inativo.", dto.RequesterId);
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Solicitante não encontrado ou conta desativada.");
+            }
+
+            // 3. Buscar Usuário Alvo
+            var targetUser = await userManager.FindByEmailAsync(dto.Email);
+            if (targetUser == null)
+            {
+                logger.LogWarning("Usuário com e-mail {Email} não encontrado para alteração de senha.", dto.Email);
+                return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+            }
+
+            bool isAdmin = await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator);
+            bool isSelf = requester.Id == targetUser.Id;
+
+            if (!isAdmin && !isSelf)
+            {
+                logger.LogWarning("Usuário {RequesterId} tentou alterar a senha de {Email} sem permissão.", dto.RequesterId, dto.Email);
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão para alterar esta senha.");
+            }
+
+            IdentityResult result;
+
+            if (isAdmin && !isSelf)
+            {
+                // Reset por Administrador (Não exige senha atual)
+                logger.LogInformation("Administrador {RequesterId} resetando senha de {Email}.", dto.RequesterId, dto.Email);
+                var token = await userManager.GeneratePasswordResetTokenAsync(targetUser);
+                result = await userManager.ResetPasswordAsync(targetUser, token, dto.Password);
+            }
+            else
+            {
+                // Alteração pelo próprio usuário (Exige senha atual)
+                if (string.IsNullOrEmpty(dto.CurrentPassword))
+                {
+                    return new ServiceResultDto<bool>(false, false, "A senha atual é obrigatória para esta operação.");
+                }
+
+                result = await userManager.ChangePasswordAsync(targetUser, dto.CurrentPassword, dto.Password);
+            }
+
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
+                logger.LogError("Erro ao alterar senha de {Email}: {Errors}", dto.Email, errors);
+                return new ServiceResultDto<bool>(false, false, $"Erro ao alterar senha: {errors}");
+            }
+
+            // Invalida sessões existentes
+            await userManager.UpdateSecurityStampAsync(targetUser);
+            
+            logger.LogInformation("Senha de {Email} alterada com sucesso.", dto.Email);
+            return new ServiceResultDto<bool>(true, true, "Senha alterada com sucesso.");
+        }
     }
 }
