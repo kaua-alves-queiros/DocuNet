@@ -23,21 +23,15 @@ namespace DocuNet.Web
             builder.Services.AddMudServices();
             builder.Host.UseSerilog((context, services, configuration) => configuration.ReadFrom.Configuration(context.Configuration).ReadFrom.Services(services));
             builder.Services.AddCascadingAuthenticationState();
-            builder.Services.AddAuthentication(options =>
-            {
-                options.DefaultScheme = IdentityConstants.ApplicationScheme;
-                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-            }).AddIdentityCookies();
-
-            builder.Services.AddIdentityCore<User>(options =>
+            builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
             {
                 options.Password.RequireDigit = false;
                 options.Password.RequireLowercase = false;
                 options.Password.RequireNonAlphanumeric = false;
                 options.Password.RequireUppercase = false;
                 options.Password.RequiredLength = 6;
+                options.User.RequireUniqueEmail = true;
             })
-            .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<ApplicationDatabaseContext>()
             .AddDefaultTokenProviders();
 
@@ -64,7 +58,6 @@ namespace DocuNet.Web
             app.UseAuthentication();
             app.UseAuthorization();
             app.UseAntiforgery();
-            app.MapStaticAssets();
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
