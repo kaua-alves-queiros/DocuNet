@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="DocuNet.Test/DocuNet.Test.csproj" Id="fac4876c-360b-4657-bb28-8aad55774eb8" />
   <Project Path="DocuNet.Web/DocuNet.Web.csproj" />
 </Solution>
