@@ -29,10 +29,10 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<Guid>(false, Guid.Empty, "Usuário solicitante não encontrado.");
             }
 
-            if (!await userManager.IsInRoleAsync(userRequester, SystemRoles.SystemAdministrator))
+            if (!await userManager.IsInRoleAsync(userRequester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(userRequester))
             {
-                logger.LogWarning("Usuário {CreatedBy} tentou criar o usuário {Email} sem permissão de administrador.", dto.CreatedBy, dto.Email);
-                return new ServiceResultDto<Guid>(false, Guid.Empty, "Você não tem permissão para criar usuários.");
+                logger.LogWarning("Usuário {CreatedBy} tentou criar o usuário {Email} sem permissão ou com conta inativa.", dto.CreatedBy, dto.Email);
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Acesso negado: Você não tem permissão ou sua conta está desativada.");
             }
 
             var newUser = new User
