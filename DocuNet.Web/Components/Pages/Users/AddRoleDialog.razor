@@ -1,0 +1,68 @@
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Dtos.User
+@using DocuNet.Web.Services
+@inject UserService UserService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Adicionar Papel</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudSelect T="string" Label="Selecione o Papel" @bind-Value="_selectedRole">
+            @foreach (var role in _availableRoles)
+            {
+                <MudSelectItem Value="@role">@role</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(string.IsNullOrEmpty(_selectedRole) || _processing)">
+            @if (_processing) { <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/> }
+            else { <MudText>Adicionar</MudText> }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid RequesterId { get; set; }
+    [Parameter] public Guid UserId { get; set; }
+    [Parameter] public List<string> CurrentRoles { get; set; } = new();
+
+    private string _selectedRole = "";
+    private List<string> _availableRoles = new();
+    private bool _processing;
+
+    protected override void OnInitialized()
+    {
+        // Pega as roles de SystemRoles que o usuário ainda não possui
+        // Seguindo o feedback do usuário, ignoramos SystemUser na gestão explícita pois é o padrão implícito
+        var allRoles = new List<string> { SystemRoles.SystemAdministrator };
+        
+        _availableRoles = allRoles.Where(r => !CurrentRoles.Contains(r)).ToList();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrEmpty(_selectedRole)) return;
+
+        _processing = true;
+        var dto = new ManageUserRoleDto(RequesterId, UserId, _selectedRole);
+        var result = await UserService.AddToRoleAsync(dto);
+        _processing = false;
+
+        if (result.Success)
+        {
+            Snackbar.Add(result.Message, Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+    }
+}
