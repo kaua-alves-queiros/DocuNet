@@ -12,14 +12,15 @@ namespace DocuNet.Web.Dtos.User
     public record CreateUserDto(
         Guid CreatedBy,
 
-        [Required]
-        [EmailAddress]
+        [property: Required(ErrorMessage = "O e-mail é obrigatório.")]
+        [property: EmailAddress(ErrorMessage = "O e-mail informado é inválido.")]
         string Email,
 
-        [Required]
+        [property: Required(ErrorMessage = "A senha é obrigatória.")]
+        [property: MinLength(6, ErrorMessage = "A senha deve ter no mínimo 6 caracteres.")]
         string Password,
 
-        [Required]
+        [property: Required(ErrorMessage = "A confirmação da senha é obrigatória.")]
         [property: Compare("Password", ErrorMessage = "As senhas não conferem.")]
         string ConfirmPassword
     );
