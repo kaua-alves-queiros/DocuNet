@@ -48,7 +48,7 @@ namespace DocuNet.Web
             builder.Services.AddDbContext<ApplicationDatabaseContext>(options => options.UseSqlite(builder.Configuration.GetConnectionString("Database")));
 
             builder.Services.AddScoped<UserService>();
-            
+            builder.Services.AddScoped<OrganizationService>();
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
