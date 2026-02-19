@@ -22,10 +22,29 @@ namespace DocuNet.Web
 
             builder.Host.UseSerilog((context, services, configuration) => configuration.ReadFrom.Configuration(context.Configuration).ReadFrom.Services(services));
             builder.Services.AddCascadingAuthenticationState();
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            }).AddIdentityCookies();
+
+            builder.Services.AddIdentityCore<User>(options =>
+            {
+                options.Password.RequireDigit = false;
+                options.Password.RequireLowercase = false;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequireUppercase = false;
+                options.Password.RequiredLength = 6;
+            })
+            .AddRoles<IdentityRole<Guid>>()
+            .AddEntityFrameworkStores<ApplicationDatabaseContext>()
+            .AddDefaultTokenProviders();
+
             builder.Services.AddAuthorization(options =>
             {
-                options.AddPolicy("SystemAdmin", policy => policy.RequireRole("SystemAdmin"));
+                options.AddPolicy(SystemRoles.SystemAdministrator, policy => policy.RequireRole(SystemRoles.SystemAdministrator));
             });
+
             builder.Services.AddDbContext<ApplicationDatabaseContext>(options => options.UseSqlite(builder.Configuration.GetConnectionString("Database")));
 
             builder.Services.AddScoped<UserService>();
