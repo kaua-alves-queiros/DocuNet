@@ -4,6 +4,7 @@ using DocuNet.Web.Dtos;
 using DocuNet.Web.Dtos.User;
 using DocuNet.Web.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace DocuNet.Web.Services
 {
@@ -268,6 +269,57 @@ namespace DocuNet.Web.Services
             
             logger.LogInformation("Senha de {Email} alterada com sucesso.", dto.Email);
             return new ServiceResultDto<bool>(true, true, "Senha alterada com sucesso.");
+        }
+
+        /// <summary>
+        /// Obtém uma lista resumida de todos os usuários cadastrados.
+        /// </summary>
+        public async Task<ServiceResultDto<List<UserSummaryDto>>> GetUsersSummaryAsync(Guid requesterId)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<List<UserSummaryDto>>(false, [], "Acesso negado.");
+            }
+
+            var users = await userManager.Users.ToListAsync();
+            var summaries = new List<UserSummaryDto>();
+
+            foreach (var user in users)
+            {
+                var roles = (await userManager.GetRolesAsync(user)).ToList();
+                var isLockedOut = await userManager.IsLockedOutAsync(user);
+                summaries.Add(new UserSummaryDto(user.Id, user.Email!, isLockedOut, roles));
+            }
+
+            return new ServiceResultDto<List<UserSummaryDto>>(true, summaries, "Usuários carregados com sucesso.");
+        }
+
+        /// <summary>
+        /// Atualiza o e-mail e username de um usuário.
+        /// </summary>
+        public async Task<ServiceResultDto<bool>> UpdateUserEmailAsync(Guid requesterId, Guid userId, string newEmail)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<bool>(false, false, "Acesso negado.");
+            }
+
+            var user = await userManager.FindByIdAsync(userId.ToString());
+            if (user == null) return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+
+            user.Email = newEmail;
+            user.UserName = newEmail;
+
+            var result = await userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
+                return new ServiceResultDto<bool>(false, false, $"Erro ao atualizar usuário: {errors}");
+            }
+
+            return new ServiceResultDto<bool>(true, true, "Usuário atualizado com sucesso.");
         }
     }
 }

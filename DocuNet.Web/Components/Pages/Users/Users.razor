@@ -1,0 +1,190 @@
+@page "/users"
+@using Microsoft.AspNetCore.Authorization
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Services
+@using DocuNet.Web.Dtos.User
+@using DocuNet.Web.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = SystemRoles.SystemAdministrator)]
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Gestão de Usuários</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Gestão de Usuários</MudText>
+
+<MudPaper Elevation="4" Class="pa-4">
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h6">Lista de Usuários</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+            Novo Usuário
+        </MudButton>
+    </MudStack>
+
+    <MudTable Items="@_users" Loading="@_loading" Hover="true" Bordered="false" Striped="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Email</MudTh>
+            <MudTh>Papéis (Roles)</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align: right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Roles">
+                @if (context.Roles.Any())
+                {
+                    @foreach (var role in context.Roles)
+                    {
+                        bool isAdmin = role == SystemRoles.SystemAdministrator;
+                        <MudChip T="string" Color="isAdmin ? Color.Secondary : Color.Default" 
+                                 Size="Size.Small" 
+                                 OnClose="@(() => RemoveRole(context, role))" 
+                                 CloseIcon="@(isAdmin ? Icons.Material.Filled.Cancel : null)">@role</MudChip>
+                    }
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">System:User</MudChip>
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Size="Size.Small" Color="Color.Info" OnClick="@(() => OpenAddRoleDialog(context))" />
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsLockedOut)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Inativo</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Ativo</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions" Style="text-align: right">
+                <MudTooltip Text="Alterar Senha">
+                    <MudIconButton Icon="@Icons.Material.Filled.LockReset" Color="Color.Warning" OnClick="@(() => OpenResetPasswordDialog(context))" />
+                </MudTooltip>
+                <MudTooltip Text="Editar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenEditDialog(context))" />
+                </MudTooltip>
+                @if (context.IsLockedOut)
+                {
+                    <MudTooltip Text="Ativar">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" OnClick="@(() => ToggleStatus(context))" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudTooltip Text="Desativar">
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error" OnClick="@(() => ToggleStatus(context))" />
+                    </MudTooltip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>Nenhum usuário encontrado.</MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText>Carregando usuários...</MudText>
+        </LoadingContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private List<UserSummaryDto> _users = new();
+    private bool _loading = true;
+    private Guid _requesterId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var guid))
+        {
+            _requesterId = guid;
+        }
+
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        _loading = true;
+        var result = await UserService.GetUsersSummaryAsync(_requesterId);
+        if (result.Success)
+        {
+            _users = result.Data ?? new();
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId };
+        var dialog = await DialogService.ShowAsync<CreateUserDialog>("Novo Usuário", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadUsers();
+    }
+
+    private async Task OpenEditDialog(UserSummaryDto user)
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId, ["UserId"] = user.Id, ["Email"] = user.Email };
+        var dialog = await DialogService.ShowAsync<EditUserDialog>("Editar Usuário", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadUsers();
+    }
+
+    private async Task OpenResetPasswordDialog(UserSummaryDto user)
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId, ["Email"] = user.Email };
+        await DialogService.ShowAsync<ResetPasswordDialog>("Resetar Senha", parameters);
+    }
+
+    private async Task ToggleStatus(UserSummaryDto user)
+    {
+        var newStatus = !user.IsLockedOut;
+        var action = newStatus ? "desativar" : "ativar";
+        var result = await UserService.ManageUserStatusAsync(new ManageUserStatusDto(_requesterId, user.Id, newStatus));
+        if (result.Success)
+        {
+            Snackbar.Add(result.Message, Severity.Success);
+            await LoadUsers();
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+    }
+
+    private async Task OpenAddRoleDialog(UserSummaryDto user)
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId, ["UserId"] = user.Id, ["CurrentRoles"] = user.Roles };
+        var dialog = await DialogService.ShowAsync<AddRoleDialog>("Adicionar Papel", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadUsers();
+    }
+
+    private async Task RemoveRole(UserSummaryDto user, string role)
+    {
+        var confirm = await DialogService.ShowMessageBox("Confirmar", $"Deseja remover o papel {role} do usuário {user.Email}?", yesText: "Sim", noText: "Não");
+        if (confirm == true)
+        {
+            var result = await UserService.RemoveFromRoleAsync(new ManageUserRoleDto(_requesterId, user.Id, role));
+            if (result.Success)
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                await LoadUsers();
+            }
+            else
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+    }
+}
