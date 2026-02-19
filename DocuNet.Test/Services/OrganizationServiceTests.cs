@@ -227,6 +227,92 @@ namespace DocuNet.Test.Services
             Assert.False(updatedOrg.IsActive);
         }
 
+        [Fact]
+        public async Task AddUserToOrganizationAsync_ShouldReturnSuccess_WhenAdminAddsActiveUserToActiveOrg()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId, UserName = "admin" };
+            var targetUserId = Guid.NewGuid();
+            var targetUser = new User { Id = targetUserId, UserName = "target" };
+            
+            _context.Users.Add(adminUser);
+            _context.Users.Add(targetUser);
+            
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Active Org", IsActive = true };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new ManageUserInOrganizationDto(adminId, org.Id, targetUserId);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+            
+            _userManagerMock.Setup(x => x.FindByIdAsync(targetUserId.ToString())).ReturnsAsync(targetUser);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(targetUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.AddUserToOrganizationAsync(dto);
+
+            Assert.True(result.Success, result.Message);
+            Assert.Equal("Usuário adicionado com sucesso.", result.Message);
+            
+            var orgInDb = await _context.Organizations.Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == org.Id);
+            Assert.Contains(orgInDb!.Users, u => u.Id == targetUserId);
+        }
+
+        [Fact]
+        public async Task AddUserToOrganizationAsync_ShouldReturnError_WhenOrgIsInactive()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var targetUserId = Guid.NewGuid();
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Inactive", IsActive = false };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new ManageUserInOrganizationDto(adminId, org.Id, targetUserId);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.AddUserToOrganizationAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Acesso negado: A organização está desativada.", result.Message);
+        }
+
+        [Fact]
+        public async Task RemoveUserFromOrganizationAsync_ShouldReturnSuccess_WhenAdminRemovesValidMember()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId, UserName = "admin" };
+            var targetUserId = Guid.NewGuid();
+            var targetUser = new User { Id = targetUserId, UserName = "member" };
+            
+            _context.Users.Add(adminUser);
+            _context.Users.Add(targetUser);
+
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Member Org", IsActive = true };
+            org.Users.Add(targetUser);
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new ManageUserInOrganizationDto(adminId, org.Id, targetUserId);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.RemoveUserFromOrganizationAsync(dto);
+
+            Assert.True(result.Success, result.Message);
+            Assert.Equal("Usuário removido com sucesso.", result.Message);
+            
+            var orgInDb = await _context.Organizations.Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == org.Id);
+            Assert.DoesNotContain(orgInDb!.Users, u => u.Id == targetUserId);
+        }
+
         public void Dispose()
         {
             _context.Dispose();

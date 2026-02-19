@@ -171,5 +171,104 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Erro interno ao gerenciar status da organização.");
             }
         }
+
+        /// <summary>
+        /// Adiciona um usuário a uma organização.
+        /// Operação restrita a administradores ativos, organizações ativas e usuários ativos.
+        /// </summary>
+        /// <param name="dto">Dados da vinculação.</param>
+        /// <returns>Verdadeiro se o usuário foi adicionado com sucesso.</returns>
+        public async Task<ServiceResultDto<bool>> AddUserToOrganizationAsync(ManageUserInOrganizationDto dto)
+        {
+            logger.LogInformation("Tentando adicionar usuário {UserId} à organização {OrgId} por {RequesterId}", dto.UserId, dto.OrganizationId, dto.RequesterId);
+
+            var validationContext = new ValidationContext(dto);
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(dto, validationContext, validationResults, true))
+            {
+                var errors = string.Join(" ", validationResults.Select(r => r.ErrorMessage));
+                return new ServiceResultDto<bool>(false, false, $"Dados inválidos: {errors}");
+            }
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Você não tem permissão ou sua conta está inativa.");
+            }
+
+            var organization = await context.Organizations.Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == dto.OrganizationId);
+            if (organization == null) return new ServiceResultDto<bool>(false, false, "Organização não encontrada.");
+            if (!organization.IsActive) return new ServiceResultDto<bool>(false, false, "Acesso negado: A organização está desativada.");
+
+            var user = await userManager.FindByIdAsync(dto.UserId.ToString());
+            if (user == null) return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+            if (await userManager.IsLockedOutAsync(user)) return new ServiceResultDto<bool>(false, false, "Acesso negado: Não é possível adicionar um usuário desativado.");
+
+            if (organization.Users.Any(u => u.Id == dto.UserId))
+            {
+                return new ServiceResultDto<bool>(false, false, "O usuário já faz parte desta organização.");
+            }
+
+            organization.Users.Add(user);
+            try
+            {
+                await context.SaveChangesAsync();
+                logger.LogInformation("Usuário {UserId} adicionado à organização {OrgId} com sucesso.", dto.UserId, dto.OrganizationId);
+                return new ServiceResultDto<bool>(true, true, "Usuário adicionado com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao adicionar usuário à organização.");
+                return new ServiceResultDto<bool>(false, false, "Erro interno ao processar a operação.");
+            }
+        }
+
+        /// <summary>
+        /// Remove um usuário de uma organização.
+        /// Operação restrita a administradores ativos e organizações ativas.
+        /// </summary>
+        /// <param name="dto">Dados da desvinculação.</param>
+        /// <returns>Verdadeiro se o usuário foi removido com sucesso.</returns>
+        public async Task<ServiceResultDto<bool>> RemoveUserFromOrganizationAsync(ManageUserInOrganizationDto dto)
+        {
+            logger.LogInformation("Tentando remover usuário {UserId} da organização {OrgId} por {RequesterId}", dto.UserId, dto.OrganizationId, dto.RequesterId);
+
+            var validationContext = new ValidationContext(dto);
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(dto, validationContext, validationResults, true))
+            {
+                var errors = string.Join(" ", validationResults.Select(r => r.ErrorMessage));
+                return new ServiceResultDto<bool>(false, false, $"Dados inválidos: {errors}");
+            }
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Você não tem permissão ou sua conta está inativa.");
+            }
+
+            var organization = await context.Organizations.Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == dto.OrganizationId);
+            if (organization == null) return new ServiceResultDto<bool>(false, false, "Organização não encontrada.");
+            if (!organization.IsActive) return new ServiceResultDto<bool>(false, false, "Acesso negado: A organização está desativada.");
+
+            var user = organization.Users.FirstOrDefault(u => u.Id == dto.UserId);
+            if (user == null)
+            {
+                return new ServiceResultDto<bool>(false, false, "O usuário não pertence a esta organização.");
+            }
+
+            organization.Users.Remove(user);
+            try
+            {
+                await context.SaveChangesAsync();
+                logger.LogInformation("Usuário {UserId} removido da organização {OrgId} com sucesso.", dto.UserId, dto.OrganizationId);
+                return new ServiceResultDto<bool>(true, true, "Usuário removido com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao remover usuário da organização.");
+                return new ServiceResultDto<bool>(false, false, "Erro interno ao processar a operação.");
+            }
+        }
     }
 }
