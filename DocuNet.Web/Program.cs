@@ -2,6 +2,7 @@ using DocuNet.Web.Components;
 using DocuNet.Web.Data;
 using DocuNet.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 
 namespace DocuNet.Web
 {
@@ -14,8 +15,9 @@ namespace DocuNet.Web
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
-            
-            
+
+            builder.Host.UseSerilog((context, services, configuration) => configuration.ReadFrom.Configuration(context.Configuration).ReadFrom.Services(services));
+
             builder.Services.AddDbContext<ApplicationDatabaseContext>(options => options.UseSqlite(builder.Configuration.GetConnectionString("Database")));
 
             builder.Services.AddSingleton<UserService>();
