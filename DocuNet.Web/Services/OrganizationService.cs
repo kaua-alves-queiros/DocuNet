@@ -70,7 +70,7 @@ namespace DocuNet.Web.Services
 
         /// <summary>
         /// Altera o nome de uma organização existente.
-        /// Operação restrita a administradores ativos.
+        /// Operação restrita a administradores ativos e organizações ativas.
         /// </summary>
         /// <param name="dto">Dados para o renome da organização.</param>
         /// <returns>Verdadeiro se a organização foi renomeada com sucesso.</returns>
@@ -99,6 +99,12 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Organização não encontrada.");
             }
 
+            if (!organization.IsActive)
+            {
+                logger.LogWarning("Tentativa de renomear organização inativa {Id}.", dto.OrganizationId);
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Não é possível renomear uma organização desativada.");
+            }
+
             if (await context.Organizations.AnyAsync(o => o.Id != dto.OrganizationId && o.Name.ToLower() == dto.NewName.ToLower()))
             {
                 return new ServiceResultDto<bool>(false, false, "Já existe outra organização com este nome.");
@@ -116,6 +122,53 @@ namespace DocuNet.Web.Services
             {
                 logger.LogError(ex, "Erro ao atualizar nome da organização {Id} no banco de dados.", dto.OrganizationId);
                 return new ServiceResultDto<bool>(false, false, "Erro interno ao atualizar a organização.");
+            }
+        }
+
+        /// <summary>
+        /// Gerencia o status de ativação/desativação de uma organização.
+        /// Operação restrita a administradores ativos.
+        /// </summary>
+        /// <param name="dto">Dados para alteração de status.</param>
+        /// <returns>Verdadeiro se o status foi alterado com sucesso.</returns>
+        public async Task<ServiceResultDto<bool>> ManageOrganizationStatusAsync(ManageOrganizationStatusDto dto)
+        {
+            logger.LogInformation("Tentando alterar status da organização {Id} para Enabled={IsEnabled} por {RequesterId}", dto.OrganizationId, dto.IsEnabled, dto.RequesterId);
+
+            var validationContext = new ValidationContext(dto);
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(dto, validationContext, validationResults, true))
+            {
+                var errors = string.Join(" ", validationResults.Select(r => r.ErrorMessage));
+                return new ServiceResultDto<bool>(false, false, $"Dados inválidos: {errors}");
+            }
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                logger.LogWarning("Permissão negada ou conta inativa ao tentar gerenciar status da organização.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
+            }
+
+            var organization = await context.Organizations.FindAsync(dto.OrganizationId);
+            if (organization == null)
+            {
+                return new ServiceResultDto<bool>(false, false, "Organização não encontrada.");
+            }
+
+            organization.IsActive = dto.IsEnabled;
+
+            try
+            {
+                await context.SaveChangesAsync();
+                var action = dto.IsEnabled ? "habilitada" : "desabilitada";
+                logger.LogInformation("Organização {Id} {Action} com sucesso.", dto.OrganizationId, action);
+                return new ServiceResultDto<bool>(true, true, $"Organização {action} com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao alterar status da organização {Id} no banco de dados.", dto.OrganizationId);
+                return new ServiceResultDto<bool>(false, false, "Erro interno ao gerenciar status da organização.");
             }
         }
     }

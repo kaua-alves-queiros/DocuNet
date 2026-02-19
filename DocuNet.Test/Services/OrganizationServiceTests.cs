@@ -182,6 +182,51 @@ namespace DocuNet.Test.Services
             Assert.Equal("Acesso negado: Você não tem permissão para gerenciar organizações.", result.Message);
         }
 
+        [Fact]
+        public async Task RenameOrganizationAsync_ShouldReturnError_WhenOrganizationIsInactive()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Inactive org", IsActive = false };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new RenameOrganizationDto(adminId, org.Id, "New Name");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.RenameOrganizationAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Acesso negado: Não é possível renomear uma organização desativada.", result.Message);
+        }
+
+        [Fact]
+        public async Task ManageOrganizationStatusAsync_ShouldReturnSuccess_WhenAdminDeactivatesOrg()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Org to Deactivate", IsActive = true };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new ManageOrganizationStatusDto(adminId, org.Id, false);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.ManageOrganizationStatusAsync(dto);
+
+            Assert.True(result.Success);
+            Assert.Equal("Organização desabilitada com sucesso.", result.Message);
+            
+            var updatedOrg = await _context.Organizations.FindAsync(org.Id);
+            Assert.False(updatedOrg.IsActive);
+        }
+
         public void Dispose()
         {
             _context.Dispose();
