@@ -1,38 +1,75 @@
-﻿<MudDialogProvider />
+﻿﻿@using Microsoft.AspNetCore.Components.Authorization
+@rendermode InteractiveServer
+
+<MudDialogProvider />
 <MudPopoverProvider />
 <MudSnackbarProvider />
 <MudThemeProvider @bind-IsDarkMode="@_isDarkMode" />
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">DocuNet.Web</a>
-    </div>
-</div>
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@_toggleLeftDrawer"/>
+        <MudSpacer/>
+        <MudText Typo="Typo.h6">DocuNet</MudText>
+        <MudSpacer/>
+        <MudIconButton Icon="@Icons.Material.Filled.Person" Color="Color.Inherit" Edge="Edge.End" OnClick="_toggleRightDrawer"/>
+    </MudAppBar>
+    <MudDrawer Variant="DrawerVariant.Temporary" @bind-Open="@_leftDrawerIsOpen" Elevation="1">
+        <MudDrawerHeader>
+            <MudNavLink Typo="Typo.h6">Zapbridge</MudNavLink>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudNavLink Match="NavLinkMatch.All" Href="/">Inicio</MudNavLink>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+            <AuthorizeView>
+                <Authorized>
+                    
+                </Authorized>
+            </AuthorizeView>
+            <AuthorizeView Roles="SystemAdmin">
+                <Authorized>
+                    <MudNavLink Match="NavLinkMatch.All" Href="/users">Usuarios</MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+            <MudSwitch @bind-Value="_isDarkMode" UncheckedColor="@Color.Dark" Color="@Color.Primary">Modo Escuro</MudSwitch>
+        </MudNavMenu>
+    </MudDrawer>
+    <MudDrawer Anchor="Anchor.End" Variant="DrawerVariant.Temporary" @bind-Open="@_rightDrwerIsOpen" Elevation="1">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">Minha conta</MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout">Sair</MudNavLink>
+                </Authorized>
+                <NotAuthorized>
+                    <MudNavLink Match="NavLinkMatch.All" Href="account/login">Entrar</MudNavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudNavMenu>
+    </MudDrawer>
+</MudLayout>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
-@code  {
+@code {
+    [Inject] NavigationManager NavigationManager { get; set; } =default!;
+    //[Inject] SignInManager<User> SignInManager { get; set; } = default!;
     private bool _isDarkMode = true;
+    bool _leftDrawerIsOpen;
+    bool _rightDrwerIsOpen;
+
+    void _toggleLeftDrawer()
+    {
+        _leftDrawerIsOpen = !_leftDrawerIsOpen;
+    }
+
+    void _toggleRightDrawer()
+    {
+        _rightDrwerIsOpen = !_rightDrwerIsOpen;
+    }
+
+    private void HandleLogout()
+    {
+        NavigationManager.NavigateTo("account/logout", forceLoad: true);
+    }
 }
