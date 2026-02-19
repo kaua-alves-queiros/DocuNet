@@ -60,10 +60,10 @@ namespace DocuNet.Web.Services
             logger.LogInformation("Tentando adicionar papel {Role} ao usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
 
             var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
-            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
             {
-                logger.LogWarning("Permissão negada ou solicitante não encontrado ao tentar adicionar papel.");
-                return new ServiceResultDto<bool>(false, false, "Você não tem permissão para gerenciar papéis.");
+                logger.LogWarning("Permissão negada ou conta inativa ao tentar adicionar papel.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
             }
 
             var user = await userManager.FindByIdAsync(dto.UserId.ToString());
@@ -97,10 +97,10 @@ namespace DocuNet.Web.Services
             logger.LogInformation("Tentando remover papel {Role} do usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
 
             var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
-            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
             {
-                logger.LogWarning("Permissão negada ou solicitante não encontrado ao tentar remover papel.");
-                return new ServiceResultDto<bool>(false, false, "Você não tem permissão para gerenciar papéis.");
+                logger.LogWarning("Permissão negada ou conta inativa ao tentar remover papel.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
             }
 
             var user = await userManager.FindByIdAsync(dto.UserId.ToString());
@@ -121,6 +121,42 @@ namespace DocuNet.Web.Services
             await userManager.UpdateSecurityStampAsync(user);
             logger.LogInformation("Papel {Role} removido com sucesso do usuário {UserId}.", dto.RoleName, dto.UserId);
             return new ServiceResultDto<bool>(true, true, "Papel removido com sucesso.");
+        }
+
+        public async Task<ServiceResultDto<bool>> DisableUserAsync(DisableUserDto dto)
+        {
+            logger.LogInformation("Tentando desabilitar usuário {UserId} por {RequesterId}", dto.UserId, dto.RequesterId);
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                logger.LogWarning("Permissão negada ou conta inativa ao tentar desabilitar usuário.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
+            }
+
+            var user = await userManager.FindByIdAsync(dto.UserId.ToString());
+            if (user == null)
+            {
+                logger.LogWarning("Usuário {UserId} não encontrado.", dto.UserId);
+                return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+            }
+
+            // Bloqueia o login permanentemente (ou até ser reabilitado)
+            await userManager.SetLockoutEnabledAsync(user, true);
+            var result = await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
+                logger.LogError("Erro ao desabilitar usuário {UserId}: {Errors}", dto.UserId, errors);
+                return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
+            }
+
+            // Invalida a sessão atual do usuário
+            await userManager.UpdateSecurityStampAsync(user);
+
+            logger.LogInformation("Usuário {UserId} desabilitado com sucesso.", dto.UserId);
+            return new ServiceResultDto<bool>(true, true, "Usuário desabilitado com sucesso.");
         }
     }
 }
