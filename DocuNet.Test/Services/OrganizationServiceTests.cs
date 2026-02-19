@@ -25,7 +25,6 @@ namespace DocuNet.Test.Services
         {
             _loggerMock = new Mock<ILogger<OrganizationService>>();
             
-            // Setup In-Memory SQLite
             _connection = new SqliteConnection("Filename=:memory:");
             _connection.Open();
             
@@ -46,7 +45,6 @@ namespace DocuNet.Test.Services
         [Fact]
         public async Task CreateOrganizationAsync_ShouldReturnSuccess_WhenAdminCreatesValidOrganization()
         {
-            // Arrange
             var adminId = Guid.NewGuid();
             var adminUser = new User { Id = adminId, Email = "admin@test.com" };
             var dto = new CreateOrganizationDto(adminId, "New Organization");
@@ -55,10 +53,8 @@ namespace DocuNet.Test.Services
             _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
             _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
 
-            // Act
             var result = await _organizationService.CreateOrganizationAsync(dto);
 
-            // Assert
             Assert.True(result.Success);
             Assert.Equal("Organização criada com sucesso.", result.Message);
             Assert.NotEqual(Guid.Empty, result.Data);
@@ -70,7 +66,6 @@ namespace DocuNet.Test.Services
         [Fact]
         public async Task CreateOrganizationAsync_ShouldReturnError_WhenUserIsNotAdmin()
         {
-            // Arrange
             var userId = Guid.NewGuid();
             var normalUser = new User { Id = userId, Email = "user@test.com" };
             var dto = new CreateOrganizationDto(userId, "Normal Org");
@@ -78,10 +73,8 @@ namespace DocuNet.Test.Services
             _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(normalUser);
             _userManagerMock.Setup(x => x.IsInRoleAsync(normalUser, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
 
-            // Act
             var result = await _organizationService.CreateOrganizationAsync(dto);
 
-            // Assert
             Assert.False(result.Success);
             Assert.Equal("Acesso negado: Você não tem permissão para criar organizações.", result.Message);
         }
@@ -89,25 +82,104 @@ namespace DocuNet.Test.Services
         [Fact]
         public async Task CreateOrganizationAsync_ShouldReturnError_WhenNameAlreadyExists()
         {
-            // Arrange
             var adminId = Guid.NewGuid();
             var adminUser = new User { Id = adminId };
             var existingOrg = new Organization { Id = Guid.NewGuid(), Name = "Existing" };
             _context.Organizations.Add(existingOrg);
             await _context.SaveChangesAsync();
 
-            var dto = new CreateOrganizationDto(adminId, "existing"); // Case insensitive check
+            var dto = new CreateOrganizationDto(adminId, "existing");
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.CreateOrganizationAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Já existe uma organização com este nome.", result.Message);
+        }
+
+        [Fact]
+        public async Task RenameOrganizationAsync_ShouldReturnSuccess_WhenAdminRenamesToValidName()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Old Name" };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new RenameOrganizationDto(adminId, org.Id, "New Name");
 
             _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
             _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
             _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
 
-            // Act
-            var result = await _organizationService.CreateOrganizationAsync(dto);
+            var result = await _organizationService.RenameOrganizationAsync(dto);
 
-            // Assert
+            Assert.True(result.Success);
+            Assert.Equal("Organização renomeada com sucesso.", result.Message);
+            
+            var updatedOrg = await _context.Organizations.FindAsync(org.Id);
+            Assert.Equal("New Name", updatedOrg.Name);
+        }
+
+        [Fact]
+        public async Task RenameOrganizationAsync_ShouldReturnError_WhenNewNameAlreadyExistsInOtherOrg()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var org1 = new Organization { Id = Guid.NewGuid(), Name = "Org 1" };
+            var org2 = new Organization { Id = Guid.NewGuid(), Name = "Org 2" };
+            _context.Organizations.AddRange(org1, org2);
+            await _context.SaveChangesAsync();
+
+            var dto = new RenameOrganizationDto(adminId, org1.Id, "Org 2");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.RenameOrganizationAsync(dto);
+
             Assert.False(result.Success);
-            Assert.Equal("Já existe uma organização com este nome.", result.Message);
+            Assert.Equal("Já existe outra organização com este nome.", result.Message);
+        }
+
+        [Fact]
+        public async Task RenameOrganizationAsync_ShouldReturnError_WhenOrganizationDoesNotExist()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var dto = new RenameOrganizationDto(adminId, Guid.NewGuid(), "New Name");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _organizationService.RenameOrganizationAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Organização não encontrada.", result.Message);
+        }
+
+        [Fact]
+        public async Task RenameOrganizationAsync_ShouldReturnError_WhenRequesterIsNotAdmin()
+        {
+            var userId = Guid.NewGuid();
+            var normalUser = new User { Id = userId };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Some Org" };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new RenameOrganizationDto(userId, org.Id, "New Name");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(normalUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(normalUser, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
+
+            var result = await _organizationService.RenameOrganizationAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Acesso negado: Você não tem permissão para gerenciar organizações.", result.Message);
         }
 
         public void Dispose()
