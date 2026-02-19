@@ -8,5 +8,7 @@ namespace DocuNet.Web.Models
         {
             Id = Guid.NewGuid();
         }
+
+        public ICollection<Organization> Organizations { get; set; } = new List<Organization>();
     }
 }
