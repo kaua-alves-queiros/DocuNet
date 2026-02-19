@@ -5,6 +5,7 @@ using DocuNet.Web.Models;
 using DocuNet.Web.Services;
 using DocuNet.Web.Extensions;
 using Microsoft.AspNetCore.Identity;
+using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -16,10 +17,10 @@ namespace DocuNet.Web
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
 
+            builder.Services.AddMudServices();
             builder.Host.UseSerilog((context, services, configuration) => configuration.ReadFrom.Configuration(context.Configuration).ReadFrom.Services(services));
             builder.Services.AddCascadingAuthenticationState();
             builder.Services.AddAuthentication(options =>
@@ -51,7 +52,6 @@ namespace DocuNet.Web
             builder.Services.AddScoped<OrganizationService>();
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/Error");
