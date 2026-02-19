@@ -11,5 +11,7 @@ namespace DocuNet.Web.Data
             : base(options)
         {
         }
+
+        public DbSet<Organization> Organizations { get; set; } = null!;
     }
 }
