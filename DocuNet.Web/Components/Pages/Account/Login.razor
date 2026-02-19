@@ -1,0 +1,79 @@
+﻿@page "/account/login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using DocuNet.Web.Models
+@inject SignInManager<User> SignInManager
+@inject NavigationManager NavigationManager
+@inject UserManager<User> UserManager
+@inject ILogger<Login> Logger
+
+<PageTitle>Login</PageTitle>
+
+<MudCard Width="400px" Class="pa-4 mx-auto mt-10">
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="LoginForm">
+        <DataAnnotationsValidator />
+
+        <MudText Typo="Typo.h5">Entrar no Zapbridge</MudText>
+
+        <MudTextField Label="E-mail"
+                      @bind-Value="Input.Email"
+                      For="@(() => Input.Email)"
+                      Variant="Variant.Outlined"
+                      ShrinkLabel="true"
+                      Name="Input.Email" />
+
+        <MudTextField Label="Senha"
+                      @bind-Value="Input.Password"
+                      For="@(() => Input.Password)"
+                      InputType="InputType.Password"
+                      Variant="Variant.Outlined"
+                      ShrinkLabel="true"
+                      Name="Input.Password" />
+
+        @if (errorMessage != null)
+        {
+            <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+        }
+
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">
+            Entrar
+        </MudButton>
+    </EditForm>
+</MudCard>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+    [SupplyParameterFromForm]
+    public LoginInput Input { get; set; } = new();
+
+    private string? errorMessage;
+
+    public async Task LoginUser()
+    {
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, false, false);
+
+        if (result.Succeeded)
+        {
+            var user = await UserManager.FindByEmailAsync(Input.Email);
+            if (user is not null)
+            {
+                await SignInManager.RefreshSignInAsync(user);
+                var roles = await UserManager.GetRolesAsync(user);
+                Logger.LogInformation("User {Email} logged in. Roles: {@Roles}", Input.Email, roles);
+            }
+
+            NavigationManager.NavigateTo(ReturnUrl ?? "/");
+        }
+        else
+        {
+            errorMessage = "Login inválido.";
+        }
+    }
+
+    public class LoginInput
+    {
+        [Required] public string Email { get; set; } = "";
+        [Required] public string Password { get; set; } = "";
+    }
+}
