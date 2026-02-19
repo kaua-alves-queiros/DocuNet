@@ -1,0 +1,18 @@
+@page "/Account/AccessDenied"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>Acesso negado</PageTitle>
+
+<MudContainer Class="mt-6">
+    <MudCard Class="pa-4 mx-auto" Style="max-width:600px">
+        <MudText Typo="Typo.h5">Acesso negado</MudText>
+        <MudText Class="mt-2">Você não tem permissão para acessar esta página.</MudText>
+        <MudDivider Class="my-2" />
+        <MudStack Row Class="justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/account/login">Entrar</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Href="/">Voltar</MudButton>
+        </MudStack>
+    </MudCard>
+</MudContainer>
