@@ -119,5 +119,52 @@ namespace DocuNet.Test.Services
             Assert.False(result.Success);
             Assert.Contains("Erro ao criar usuário: Erro de teste.", result.Message);
         }
+
+        [Fact]
+        public async Task AddToRoleAsync_ShouldReturnSuccess_WhenAdminAddsValidRole()
+        {
+            // Arrange
+            var adminId = Guid.NewGuid();
+            var targetUserId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var targetUser = new User { Id = targetUserId };
+            var dto = new ManageUserRoleDto(adminId, targetUserId, "SomeRole");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.FindByIdAsync(targetUserId.ToString())).ReturnsAsync(targetUser);
+            _roleManagerMock.Setup(x => x.RoleExistsAsync("SomeRole")).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.AddToRoleAsync(targetUser, "SomeRole")).ReturnsAsync(IdentityResult.Success);
+
+            // Act
+            var result = await _userService.AddToRoleAsync(dto);
+
+            // Assert
+            Assert.True(result.Success);
+            Assert.Equal("Papel adicionado com sucesso.", result.Message);
+        }
+
+        [Fact]
+        public async Task RemoveFromRoleAsync_ShouldReturnSuccess_WhenAdminRemovesRole()
+        {
+            // Arrange
+            var adminId = Guid.NewGuid();
+            var targetUserId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var targetUser = new User { Id = targetUserId };
+            var dto = new ManageUserRoleDto(adminId, targetUserId, "SomeRole");
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.FindByIdAsync(targetUserId.ToString())).ReturnsAsync(targetUser);
+            _userManagerMock.Setup(x => x.RemoveFromRoleAsync(targetUser, "SomeRole")).ReturnsAsync(IdentityResult.Success);
+
+            // Act
+            var result = await _userService.RemoveFromRoleAsync(dto);
+
+            // Assert
+            Assert.True(result.Success);
+            Assert.Equal("Papel removido com sucesso.", result.Message);
+        }
     }
 }
