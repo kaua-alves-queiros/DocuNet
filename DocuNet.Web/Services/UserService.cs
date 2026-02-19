@@ -91,5 +91,36 @@ namespace DocuNet.Web.Services
             logger.LogInformation("Papel {Role} adicionado com sucesso ao usuário {UserId}.", dto.RoleName, dto.UserId);
             return new ServiceResultDto<bool>(true, true, "Papel adicionado com sucesso.");
         }
+
+        public async Task<ServiceResultDto<bool>> RemoveFromRoleAsync(ManageUserRoleDto dto)
+        {
+            logger.LogInformation("Tentando remover papel {Role} do usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                logger.LogWarning("Permissão negada ou solicitante não encontrado ao tentar remover papel.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão para gerenciar papéis.");
+            }
+
+            var user = await userManager.FindByIdAsync(dto.UserId.ToString());
+            if (user == null)
+            {
+                logger.LogWarning("Usuário {UserId} não encontrado para remoção de papel.", dto.UserId);
+                return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+            }
+
+            var result = await userManager.RemoveFromRoleAsync(user, dto.RoleName);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
+                logger.LogError("Erro ao remover papel {Role} do usuário {UserId}: {Errors}", dto.RoleName, dto.UserId, errors);
+                return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
+            }
+
+            await userManager.UpdateSecurityStampAsync(user);
+            logger.LogInformation("Papel {Role} removido com sucesso do usuário {UserId}.", dto.RoleName, dto.UserId);
+            return new ServiceResultDto<bool>(true, true, "Papel removido com sucesso.");
+        }
     }
 }
