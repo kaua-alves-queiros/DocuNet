@@ -200,14 +200,14 @@ namespace DocuNet.Test.Services
         }
 
         [Fact]
-        public async Task DisableUserAsync_ShouldReturnSuccess_WhenAdminDisablesUser()
+        public async Task ManageUserStatusAsync_ShouldReturnSuccess_WhenAdminLocksUser()
         {
             // Arrange
             var adminId = Guid.NewGuid();
             var targetUserId = Guid.NewGuid();
             var adminUser = new User { Id = adminId };
             var targetUser = new User { Id = targetUserId };
-            var dto = new DisableUserDto(adminId, targetUserId);
+            var dto = new ManageUserStatusDto(adminId, targetUserId, true);
 
             _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
             _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
@@ -217,7 +217,7 @@ namespace DocuNet.Test.Services
             _userManagerMock.Setup(x => x.SetLockoutEndDateAsync(targetUser, DateTimeOffset.MaxValue)).ReturnsAsync(IdentityResult.Success);
 
             // Act
-            var result = await _userService.DisableUserAsync(dto);
+            var result = await _userService.ManageUserStatusAsync(dto);
 
             // Assert
             Assert.True(result.Success);
@@ -227,14 +227,14 @@ namespace DocuNet.Test.Services
         }
 
         [Fact]
-        public async Task EnableUserAsync_ShouldReturnSuccess_WhenAdminEnablesUser()
+        public async Task ManageUserStatusAsync_ShouldReturnSuccess_WhenAdminUnlocksUser()
         {
             // Arrange
             var adminId = Guid.NewGuid();
             var targetUserId = Guid.NewGuid();
             var adminUser = new User { Id = adminId };
             var targetUser = new User { Id = targetUserId };
-            var dto = new EnableUserDto(adminId, targetUserId);
+            var dto = new ManageUserStatusDto(adminId, targetUserId, false);
 
             _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
             _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
@@ -243,7 +243,7 @@ namespace DocuNet.Test.Services
             _userManagerMock.Setup(x => x.SetLockoutEndDateAsync(targetUser, null)).ReturnsAsync(IdentityResult.Success);
 
             // Act
-            var result = await _userService.EnableUserAsync(dto);
+            var result = await _userService.ManageUserStatusAsync(dto);
 
             // Assert
             Assert.True(result.Success);

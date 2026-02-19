@@ -147,84 +147,51 @@ namespace DocuNet.Web.Services
         }
 
         /// <summary>
-        /// Desativa a conta de um usuário permanentemente (ou até reativação manual).
+        /// Gerencia o status de bloqueio de um usuário (ativação/desativação).
         /// </summary>
-        /// <param name="dto">Contém o ID do usuário a ser desativado e o solicitante.</param>
-        /// <returns>Verdadeiro se o usuário foi bloqueado com sucesso.</returns>
-        /// <remarks>
-        /// Esta operação utiliza o sistema de Lockout do Identity e invalida o carimbo de segurança (Security Stamp)
-        /// para forçar o encerramento de todas as sessões ativas do usuário.
-        /// </remarks>
-        public async Task<ServiceResultDto<bool>> DisableUserAsync(DisableUserDto dto)
+        /// <param name="dto">Dados do status, contendo o ID do usuário, o novo estado e o solicitante.</param>
+        /// <returns>Verdadeiro se o status foi alterado com sucesso.</returns>
+        public async Task<ServiceResultDto<bool>> ManageUserStatusAsync(ManageUserStatusDto dto)
         {
-            logger.LogInformation("Tentando desabilitar usuário {UserId} por {RequesterId}", dto.UserId, dto.RequesterId);
+            logger.LogInformation("Tentando alterar status de bloqueio do usuário {UserId} para {IsLocked} por {RequesterId}", dto.UserId, dto.IsLocked, dto.RequesterId);
 
             var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
             if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
             {
-                logger.LogWarning("Permissão negada ou conta inativa ao tentar desabilitar usuário.");
+                logger.LogWarning("Permissão negada ou conta inativa ao tentar gerenciar status do usuário.");
                 return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
             }
 
             var user = await userManager.FindByIdAsync(dto.UserId.ToString());
             if (user == null)
             {
-                logger.LogWarning("Usuário {UserId} não encontrado.", dto.UserId);
+                logger.LogWarning("Usuário {UserId} não encontrado para alteração de status.", dto.UserId);
                 return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
             }
 
-            await userManager.SetLockoutEnabledAsync(user, true);
-            var result = await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+            IdentityResult result;
+            if (dto.IsLocked)
+            {
+                await userManager.SetLockoutEnabledAsync(user, true);
+                result = await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+            }
+            else
+            {
+                result = await userManager.SetLockoutEndDateAsync(user, null);
+            }
 
             if (!result.Succeeded)
             {
                 var errors = string.Join(" ", result.Errors.Select(e => e.Description));
-                logger.LogError("Erro ao desabilitar usuário {UserId}: {Errors}", dto.UserId, errors);
+                logger.LogError("Erro ao alterar status do usuário {UserId}: {Errors}", dto.UserId, errors);
                 return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
             }
 
             await userManager.UpdateSecurityStampAsync(user);
 
-            logger.LogInformation("Usuário {UserId} desabilitado com sucesso.", dto.UserId);
-            return new ServiceResultDto<bool>(true, true, "Usuário desabilitado com sucesso.");
-        }
-
-        /// <summary>
-        /// Reativa a conta de um usuário previamente desativado.
-        /// </summary>
-        /// <param name="dto">Contém o ID do usuário a ser reativado e o solicitante.</param>
-        /// <returns>Verdadeiro se o bloqueio foi removido com sucesso.</returns>
-        public async Task<ServiceResultDto<bool>> EnableUserAsync(EnableUserDto dto)
-        {
-            logger.LogInformation("Tentando habilitar usuário {UserId} por {RequesterId}", dto.UserId, dto.RequesterId);
-
-            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
-            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
-            {
-                logger.LogWarning("Permissão negada ou conta inativa ao tentar habilitar usuário.");
-                return new ServiceResultDto<bool>(false, false, "Você não tem permissão ou sua conta está desativada.");
-            }
-
-            var user = await userManager.FindByIdAsync(dto.UserId.ToString());
-            if (user == null)
-            {
-                logger.LogWarning("Usuário {UserId} não encontrado.", dto.UserId);
-                return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
-            }
-
-            var result = await userManager.SetLockoutEndDateAsync(user, null);
-
-            if (!result.Succeeded)
-            {
-                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
-                logger.LogError("Erro ao habilitar usuário {UserId}: {Errors}", dto.UserId, errors);
-                return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
-            }
-
-            await userManager.UpdateSecurityStampAsync(user);
-
-            logger.LogInformation("Usuário {UserId} habilitado com sucesso.", dto.UserId);
-            return new ServiceResultDto<bool>(true, true, "Usuário habilitado com sucesso.");
+            var action = dto.IsLocked ? "desabilitado" : "habilitado";
+            logger.LogInformation("Usuário {UserId} {Action} com sucesso.", dto.UserId, action);
+            return new ServiceResultDto<bool>(true, true, $"Usuário {action} com sucesso.");
         }
 
         /// <summary>
