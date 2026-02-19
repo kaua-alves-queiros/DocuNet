@@ -7,8 +7,21 @@ using Microsoft.AspNetCore.Identity;
 
 namespace DocuNet.Web.Services
 {
+    /// <summary>
+    /// Serviço responsável pela gestão de usuários no sistema.
+    /// Encapsula operações de criação, gestão de papéis (roles), alteração de status (bloqueio/desbloqueio) e gestão de credenciais.
+    /// </summary>
+    /// <remarks>
+    /// Todas as operações administrativas validam se o solicitante possui as permissões necessárias 
+    /// e se sua conta não está inativa no sistema.
+    /// </remarks>
     public class UserService(ILogger<UserService> logger, UserManager<User> userManager, RoleManager<IdentityRole<Guid>> roleManager)
     {
+        /// <summary>
+        /// Cria um novo usuário no sistema.
+        /// </summary>
+        /// <param name="dto">Dados para criação do usuário, incluindo credenciais iniciais.</param>
+        /// <returns>O ID do usuário criado em caso de sucesso.</returns>
         public async Task<ServiceResultDto<Guid>> CreateUserAsync(CreateUserDto dto)
         {
             logger.LogInformation("Iniciando criação de usuário. Email: {Email}, Criado por: {CreatedBy}", dto.Email, dto.CreatedBy);
@@ -55,6 +68,11 @@ namespace DocuNet.Web.Services
             return new ServiceResultDto<Guid>(true, newUser.Id, "Usuário criado com sucesso.");
         }
 
+        /// <summary>
+        /// Atribui um papel (role) a um usuário existente.
+        /// </summary>
+        /// <param name="dto">Dados da atribuição, contendo o ID do usuário, a role e o solicitante.</param>
+        /// <returns>Verdadeiro se a operação for concluída com sucesso.</returns>
         public async Task<ServiceResultDto<bool>> AddToRoleAsync(ManageUserRoleDto dto)
         {
             logger.LogInformation("Tentando adicionar papel {Role} ao usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
@@ -92,6 +110,11 @@ namespace DocuNet.Web.Services
             return new ServiceResultDto<bool>(true, true, "Papel adicionado com sucesso.");
         }
 
+        /// <summary>
+        /// Remove um papel (role) de um usuário.
+        /// </summary>
+        /// <param name="dto">Dados da remoção, contendo o ID do usuário, a role e o solicitante.</param>
+        /// <returns>Verdadeiro se a operação for concluída com sucesso.</returns>
         public async Task<ServiceResultDto<bool>> RemoveFromRoleAsync(ManageUserRoleDto dto)
         {
             logger.LogInformation("Tentando remover papel {Role} do usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
@@ -123,6 +146,15 @@ namespace DocuNet.Web.Services
             return new ServiceResultDto<bool>(true, true, "Papel removido com sucesso.");
         }
 
+        /// <summary>
+        /// Desativa a conta de um usuário permanentemente (ou até reativação manual).
+        /// </summary>
+        /// <param name="dto">Contém o ID do usuário a ser desativado e o solicitante.</param>
+        /// <returns>Verdadeiro se o usuário foi bloqueado com sucesso.</returns>
+        /// <remarks>
+        /// Esta operação utiliza o sistema de Lockout do Identity e invalida o carimbo de segurança (Security Stamp)
+        /// para forçar o encerramento de todas as sessões ativas do usuário.
+        /// </remarks>
         public async Task<ServiceResultDto<bool>> DisableUserAsync(DisableUserDto dto)
         {
             logger.LogInformation("Tentando desabilitar usuário {UserId} por {RequesterId}", dto.UserId, dto.RequesterId);
@@ -141,7 +173,6 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
             }
 
-            // Bloqueia o login permanentemente (ou até ser reabilitado)
             await userManager.SetLockoutEnabledAsync(user, true);
             var result = await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
 
@@ -152,13 +183,17 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
             }
 
-            // Invalida a sessão atual do usuário
             await userManager.UpdateSecurityStampAsync(user);
 
             logger.LogInformation("Usuário {UserId} desabilitado com sucesso.", dto.UserId);
             return new ServiceResultDto<bool>(true, true, "Usuário desabilitado com sucesso.");
         }
 
+        /// <summary>
+        /// Reativa a conta de um usuário previamente desativado.
+        /// </summary>
+        /// <param name="dto">Contém o ID do usuário a ser reativado e o solicitante.</param>
+        /// <returns>Verdadeiro se o bloqueio foi removido com sucesso.</returns>
         public async Task<ServiceResultDto<bool>> EnableUserAsync(EnableUserDto dto)
         {
             logger.LogInformation("Tentando habilitar usuário {UserId} por {RequesterId}", dto.UserId, dto.RequesterId);
@@ -177,7 +212,6 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
             }
 
-            // Remove o bloqueio de login
             var result = await userManager.SetLockoutEndDateAsync(user, null);
 
             if (!result.Succeeded)
@@ -193,11 +227,20 @@ namespace DocuNet.Web.Services
             return new ServiceResultDto<bool>(true, true, "Usuário habilitado com sucesso.");
         }
 
+        /// <summary>
+        /// Altera a senha de um usuário.
+        /// Suporta tanto o reset administrativo quanto a alteração por autoatendimento.
+        /// </summary>
+        /// <param name="dto">Dados da alteração, incluindo identificação, nova senha e opcionalmente a senha atual.</param>
+        /// <returns>Verdadeiro se a senha foi alterada com sucesso.</returns>
+        /// <remarks>
+        /// Se o solicitante for um administrador, a senha atual é ignorada. 
+        /// Se for o próprio usuário, a senha atual é obrigatória para validação de segurança.
+        /// </remarks>
         public async Task<ServiceResultDto<bool>> ChangePasswordAsync(ChangePasswordDto dto)
         {
             logger.LogInformation("Solicitação de alteração de senha para {Email} solicitada por {RequesterId}", dto.Email, dto.RequesterId);
 
-            // 1. Validação do DTO
             var validationContext = new ValidationContext(dto);
             var validationResults = new List<ValidationResult>();
             if (!Validator.TryValidateObject(dto, validationContext, validationResults, true))
@@ -206,7 +249,6 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, $"Dados inválidos: {errors}");
             }
 
-            // 2. Buscar Solicitante e validar se está ativo
             var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
             if (requester == null || await userManager.IsLockedOutAsync(requester))
             {
@@ -214,7 +256,6 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Acesso negado: Solicitante não encontrado ou conta desativada.");
             }
 
-            // 3. Buscar Usuário Alvo
             var targetUser = await userManager.FindByEmailAsync(dto.Email);
             if (targetUser == null)
             {
@@ -235,14 +276,12 @@ namespace DocuNet.Web.Services
 
             if (isAdmin && !isSelf)
             {
-                // Reset por Administrador (Não exige senha atual)
                 logger.LogInformation("Administrador {RequesterId} resetando senha de {Email}.", dto.RequesterId, dto.Email);
                 var token = await userManager.GeneratePasswordResetTokenAsync(targetUser);
                 result = await userManager.ResetPasswordAsync(targetUser, token, dto.Password);
             }
             else
             {
-                // Alteração pelo próprio usuário (Exige senha atual)
                 if (string.IsNullOrEmpty(dto.CurrentPassword))
                 {
                     return new ServiceResultDto<bool>(false, false, "A senha atual é obrigatória para esta operação.");
@@ -258,7 +297,6 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, $"Erro ao alterar senha: {errors}");
             }
 
-            // Invalida sessões existentes
             await userManager.UpdateSecurityStampAsync(targetUser);
             
             logger.LogInformation("Senha de {Email} alterada com sucesso.", dto.Email);
