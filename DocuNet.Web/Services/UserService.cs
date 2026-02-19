@@ -54,5 +54,42 @@ namespace DocuNet.Web.Services
             logger.LogInformation("Usuário {Email} (ID: {Id}) criado com sucesso por {CreatedBy}.", dto.Email, newUser.Id, dto.CreatedBy);
             return new ServiceResultDto<Guid>(true, newUser.Id, "Usuário criado com sucesso.");
         }
+
+        public async Task<ServiceResultDto<bool>> AddToRoleAsync(ManageUserRoleDto dto)
+        {
+            logger.LogInformation("Tentando adicionar papel {Role} ao usuário {UserId} por {RequesterId}", dto.RoleName, dto.UserId, dto.RequesterId);
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                logger.LogWarning("Permissão negada ou solicitante não encontrado ao tentar adicionar papel.");
+                return new ServiceResultDto<bool>(false, false, "Você não tem permissão para gerenciar papéis.");
+            }
+
+            var user = await userManager.FindByIdAsync(dto.UserId.ToString());
+            if (user == null)
+            {
+                logger.LogWarning("Usuário {UserId} não encontrado para adição de papel.", dto.UserId);
+                return new ServiceResultDto<bool>(false, false, "Usuário não encontrado.");
+            }
+
+            if (!await roleManager.RoleExistsAsync(dto.RoleName))
+            {
+                logger.LogWarning("Papel {Role} não existe no sistema.", dto.RoleName);
+                return new ServiceResultDto<bool>(false, false, "O papel especificado não existe.");
+            }
+
+            var result = await userManager.AddToRoleAsync(user, dto.RoleName);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(" ", result.Errors.Select(e => e.Description));
+                logger.LogError("Erro ao adicionar papel {Role} ao usuário {UserId}: {Errors}", dto.RoleName, dto.UserId, errors);
+                return new ServiceResultDto<bool>(false, false, $"Erro: {errors}");
+            }
+
+            await userManager.UpdateSecurityStampAsync(user);
+            logger.LogInformation("Papel {Role} adicionado com sucesso ao usuário {UserId}.", dto.RoleName, dto.UserId);
+            return new ServiceResultDto<bool>(true, true, "Papel adicionado com sucesso.");
+        }
     }
 }
