@@ -1,0 +1,178 @@
+@page "/devices"
+@using Microsoft.AspNetCore.Authorization
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Services
+@using DocuNet.Web.Dtos.Device
+@using DocuNet.Web.Enumerators
+@using DocuNet.Web.States
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.ComponentModel.DataAnnotations
+@using System.Reflection
+@attribute [Authorize]
+@implements IDisposable
+@inject DeviceService DeviceService
+@inject OrganizationState OrganizationState
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Gestão de Dispositivos</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Gestão de Dispositivos</MudText>
+
+@if (OrganizationState.CurrentOrganization == null)
+{
+    <MudAlert Severity="Severity.Info">Selecione uma organização no menu acima para visualizar os dispositivos.</MudAlert>
+}
+else
+{
+    <MudPaper Elevation="4" Class="pa-4">
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudText Typo="Typo.h6">Lista de Dispositivos</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                Novo Dispositivo
+            </MudButton>
+        </MudStack>
+
+        <MudTable Items="@_devices" Loading="@_loading" Hover="true" Bordered="false" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Nome</MudTh>
+                <MudTh>Endereço IP</MudTh>
+                <MudTh>Tipo</MudTh>
+                <MudTh Style="text-align: right">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nome">@context.Name</MudTd>
+                <MudTd DataLabel="Endereço IP">@context.IpAddress</MudTd>
+                <MudTd DataLabel="Tipo">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@GetDisplayName(context.Type)</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right">
+                    <MudTooltip Text="Editar">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenUpdateDialog(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Excluir">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteDevice(context))" />
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>Nenhum dispositivo encontrado para esta organização.</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>Carregando dispositivos...</MudText>
+            </LoadingContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private List<DeviceSummaryDto> _devices = new();
+    private bool _loading = true;
+    private Guid _requesterId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        OrganizationState.OnChange += OnOrganizationChanged;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var guid))
+            _requesterId = guid;
+
+        await LoadDevices();
+    }
+
+    private async void OnOrganizationChanged()
+    {
+        await LoadDevices();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadDevices()
+    {
+        if (OrganizationState.CurrentOrganization == null)
+        {
+            _devices.Clear();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var result = await DeviceService.GetDevicesAsync(_requesterId);
+            if (result.Success && result.Data != null)
+                _devices = result.Data.Where(d => d.OrganizationId == OrganizationState.CurrentOrganization.Id).ToList();
+            else if (!result.Success)
+                Snackbar.Add(result.Message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao carregar dispositivos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateDeviceDialog>("Novo Dispositivo", options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadDevices();
+    }
+
+    private async Task OpenUpdateDialog(DeviceSummaryDto device)
+    {
+        var parameters = new DialogParameters
+        {
+            { "DeviceId", device.Id },
+            { "CurrentName", device.Name },
+            { "CurrentIp", device.IpAddress },
+            { "CurrentType", device.Type }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<UpdateDeviceDialog>("Editar Dispositivo", parameters, options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadDevices();
+    }
+
+    private async Task DeleteDevice(DeviceSummaryDto device)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Confirmar Exclusão",
+            $"Tem certeza que deseja excluir o dispositivo '{device.Name}'?",
+            yesText: "Excluir", cancelText: "Cancelar");
+
+        if (confirm == true)
+        {
+            var result = await DeviceService.DeleteDeviceAsync(new DeleteDeviceDto(_requesterId, device.Id));
+            if (result.Success)
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                await LoadDevices();
+            }
+            else
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+    }
+
+    private string GetDisplayName(Enum value)
+    {
+        var field = value.GetType().GetField(value.ToString());
+        if (field == null) return value.ToString();
+        var attr = field.GetCustomAttribute<DisplayAttribute>();
+        return attr?.Name ?? value.ToString();
+    }
+
+    public void Dispose()
+    {
+        OrganizationState.OnChange -= OnOrganizationChanged;
+    }
+}
