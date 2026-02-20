@@ -1,0 +1,144 @@
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Dtos.Organization
+@using DocuNet.Web.States
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@implements IDisposable
+@inject OrganizationState OrganizationState
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleLeftDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">DocuNet</MudText>
+
+        <MudSpacer />
+
+        <AuthorizeView>
+            <Authorized>
+                @if (OrganizationState.AvailableOrganizations.Count > 1)
+                {
+                    <MudSelect T="OrganizationSummaryDto"
+                               Value="OrganizationState.CurrentOrganization"
+                               ValueChanged="OnOrganizationChanged"
+                               ToStringFunc="@(o => o?.Name)"
+                               Placeholder="Selecionar Organização"
+                               Variant="Variant.Text"
+                               Dense="true"
+                               Style="width: 250px; color: white !important; margin-right: 8px;">
+                        @foreach (var org in OrganizationState.AvailableOrganizations)
+                        {
+                            <MudSelectItem Value="@org">@org.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else if (OrganizationState.AvailableOrganizations.Count == 1)
+                {
+                    <MudText Class="mr-4" Typo="Typo.subtitle1">@OrganizationState.CurrentOrganization?.Name</MudText>
+                }
+            </Authorized>
+        </AuthorizeView>
+
+        <MudIconButton Icon="@Icons.Material.Filled.Person" Color="Color.Inherit" Edge="Edge.End" OnClick="ToggleRightDrawer" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_leftDrawerOpen" Elevation="1" Variant="DrawerVariant.Temporary">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">DocuNet</MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudNavLink Match="NavLinkMatch.All" Href="/" Icon="@Icons.Material.Filled.Home">Início</MudNavLink>
+
+            <AuthorizeView>
+                <Authorized>
+                    @if (OrganizationState.CurrentOrganization != null)
+                    {
+                        <MudNavLink Match="NavLinkMatch.All" Href="/devices" Icon="@Icons.Material.Filled.Devices">Dispositivos</MudNavLink>
+                    }
+                </Authorized>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@SystemRoles.SystemAdministrator">
+                <Authorized>
+                    <MudNavGroup Title="Sistema" Icon="@Icons.Material.Filled.Settings" @bind-Expanded="_sistemaExpanded">
+                        <MudNavLink Match="NavLinkMatch.All" Href="/users" Icon="@Icons.Material.Filled.People">Usuários</MudNavLink>
+                        <MudNavLink Match="NavLinkMatch.All" Href="/organizations" Icon="@Icons.Material.Filled.Business">Organizações</MudNavLink>
+                    </MudNavGroup>
+                </Authorized>
+            </AuthorizeView>
+
+            <MudSwitch @bind-Value="_isDarkMode" UncheckedColor="@Color.Dark" Color="@Color.Primary" Class="mt-4 ml-2">Modo Escuro</MudSwitch>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudDrawer Anchor="Anchor.End" @bind-Open="_rightDrawerOpen" Elevation="1" Variant="DrawerVariant.Temporary">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">Minha conta</MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <AuthorizeView>
+                <Authorized>
+                    <MudNavLink OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout">Sair</MudNavLink>
+                </Authorized>
+                <NotAuthorized>
+                    <MudNavLink Match="NavLinkMatch.All" Href="account/login">Entrar</MudNavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6">
+            @ChildContent
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    bool _isDarkMode = true;
+    bool _leftDrawerOpen = false;
+    bool _rightDrawerOpen = false;
+    bool _sistemaExpanded = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        OrganizationState.OnChange += StateHasChanged;
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userIdStr, out var userId))
+            {
+                await OrganizationState.InitializeAsync(userId);
+            }
+        }
+    }
+
+    private void OnOrganizationChanged(OrganizationSummaryDto org)
+    {
+        OrganizationState.SetOrganization(org);
+    }
+
+    void ToggleLeftDrawer() => _leftDrawerOpen = !_leftDrawerOpen;
+    void ToggleRightDrawer() => _rightDrawerOpen = !_rightDrawerOpen;
+
+    private void HandleLogout()
+    {
+        NavigationManager.NavigateTo("account/logout", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        OrganizationState.OnChange -= StateHasChanged;
+    }
+}
