@@ -3,6 +3,7 @@ using System;
 using DocuNet.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocuNet.Web.Migrations
 {
     [DbContext(typeof(ApplicationDatabaseContext))]
-    partial class ApplicationDatabaseContextModelSnapshot : ModelSnapshot
+    [Migration("20260220032423_AddedConnections")]
+    partial class AddedConnections
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -26,16 +29,10 @@ namespace DocuNet.Web.Migrations
                     b.Property<Guid>("DestinationDeviceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("DestinationInterface")
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("SourceDeviceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SourceInterface")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Speed")

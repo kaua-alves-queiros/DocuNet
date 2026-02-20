@@ -3,6 +3,7 @@ using DocuNet.Web.Constants;
 using DocuNet.Web.Data;
 using DocuNet.Web.Dtos;
 using DocuNet.Web.Dtos.Device;
+using DocuNet.Web.Dtos.Connection;
 using DocuNet.Web.Enumerators;
 using DocuNet.Web.Models;
 using Microsoft.AspNetCore.Identity;
@@ -286,5 +287,280 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Erro interno ao atualizar dispositivo.");
             }
         }
+
+        #region Connections Management
+
+        /// <summary>
+        /// Cria uma nova conexão entre dois dispositivos.
+        /// Regras de Acesso: Administradores de Sistema têm acesso total; Membros podem criar conexões apenas se ambos os dispositivos pertencerem a uma organização na qual são membros.
+        /// </summary>
+        public async Task<ServiceResultDto<Guid>> CreateConnectionAsync(CreateConnectionDto dto)
+        {
+            logger.LogInformation("Solicitação de criação de conexão entre {Source} e {Dest} por {RequesterId}", dto.SourceDeviceId, dto.DestinationDeviceId, dto.RequesterId);
+
+            if (dto.SourceDeviceId == dto.DestinationDeviceId)
+            {
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Não é possível conectar um dispositivo a ele mesmo.");
+            }
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Solicitante inválido ou inativo.");
+            }
+
+            var source = await context.Devices.FindAsync(dto.SourceDeviceId);
+            var dest = await context.Devices.FindAsync(dto.DestinationDeviceId);
+
+            if (source == null || dest == null)
+            {
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Um ou ambos os dispositivos não foram encontrados.");
+            }
+
+            // Garante que ambos os dispositivos pertencem à mesma organização informada
+            if (source.OrganizationId != dto.OrganizationId || dest.OrganizationId != dto.OrganizationId)
+            {
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Os dispositivos devem pertencer à mesma organização.");
+            }
+
+            bool hasPermission = false;
+            if (await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                hasPermission = true;
+            }
+            else
+            {
+                // Membros só podem criar se pertencerem à organização alvo
+                var isMember = await context.Organizations
+                    .AnyAsync(o => o.Id == dto.OrganizationId && o.Users.Any(u => u.Id == dto.RequesterId));
+
+                if (isMember)
+                {
+                    hasPermission = true;
+                }
+            }
+
+            if (!hasPermission)
+            {
+                logger.LogWarning("Tentativa negada de criar conexão: {RequesterId} não tem permissão para a organização {OrgId}", dto.RequesterId, dto.OrganizationId);
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Acesso negado: Você não tem permissão para gerenciar conexões nesta organização.");
+            }
+
+            var connection = new Connection
+            {
+                Id = Guid.NewGuid(),
+                SourceDeviceId = dto.SourceDeviceId,
+                SourceInterface = dto.SourceInterface,
+                DestinationDeviceId = dto.DestinationDeviceId,
+                DestinationInterface = dto.DestinationInterface,
+                Type = dto.Type,
+                Speed = dto.Speed,
+                OrganizationId = dto.OrganizationId
+            };
+
+            try
+            {
+                context.Connections.Add(connection);
+                await context.SaveChangesAsync();
+                logger.LogInformation("Conexão {Id} criada com sucesso por {RequesterId}", connection.Id, dto.RequesterId);
+                return new ServiceResultDto<Guid>(true, connection.Id, "Conexão criada com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao criar conexão.");
+                return new ServiceResultDto<Guid>(false, Guid.Empty, "Erro interno ao criar conexão.");
+            }
+        }
+
+        /// <summary>
+        /// Lista conexões visíveis ao solicitante.
+        /// Regras de Acesso: Administradores de Sistema visualizam todas as conexões de todas as organizações; Membros visualizam apenas conexões das organizações em que estão inseridos.
+        /// </summary>
+        public async Task<ServiceResultDto<List<ConnectionSummaryDto>>> GetConnectionsAsync(Guid requesterId)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<List<ConnectionSummaryDto>>(false, [], "Acesso negado.");
+            }
+
+            var isAdmin = await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator);
+            
+            IQueryable<Connection> query = context.Connections
+                .Include(c => c.SourceDevice)
+                .Include(c => c.DestinationDevice);
+
+            if (!isAdmin)
+            {
+                // Filtra apenas conexões de organizações onde o usuário é membro
+                var userOrgIds = await context.Organizations
+                    .Where(o => o.Users.Any(u => u.Id == requesterId))
+                    .Select(o => o.Id)
+                    .ToListAsync();
+
+                query = query.Where(c => userOrgIds.Contains(c.OrganizationId));
+            }
+
+            var connections = await query.Select(c => new ConnectionSummaryDto(
+                c.Id,
+                c.SourceDeviceId,
+                c.SourceDevice.Name,
+                c.SourceInterface,
+                c.DestinationDeviceId,
+                c.DestinationDevice.Name,
+                c.DestinationInterface,
+                c.Type,
+                c.Speed,
+                c.OrganizationId
+            )).ToListAsync();
+
+            return new ServiceResultDto<List<ConnectionSummaryDto>>(true, connections, "Conexões listadas com sucesso.");
+        }
+
+        /// <summary>
+        /// Remove uma conexão existente.
+        /// Regras de Acesso: Administradores de Sistema podem remover qualquer conexão; Membros podem remover apenas se a conexão pertencer a uma organização na qual são membros.
+        /// </summary>
+        public async Task<ServiceResultDto<bool>> DeleteConnectionAsync(Guid requesterId, Guid connectionId)
+        {
+            logger.LogInformation("Solicitação de remoção de conexão {ConnId} por {RequesterId}", connectionId, requesterId);
+
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<bool>(false, false, "Solicitante inválido.");
+            }
+
+            var connection = await context.Connections.FindAsync(connectionId);
+            if (connection == null)
+            {
+                return new ServiceResultDto<bool>(false, false, "Conexão não encontrada.");
+            }
+
+            bool hasPermission = false;
+            if (await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                hasPermission = true;
+            }
+            else
+            {
+                // Verifica se o usuário é membro da organização da conexão
+                var isMember = await context.Organizations
+                    .AnyAsync(o => o.Id == connection.OrganizationId && o.Users.Any(u => u.Id == requesterId));
+
+                if (isMember)
+                {
+                    hasPermission = true;
+                }
+            }
+
+            if (!hasPermission)
+            {
+                logger.LogWarning("Tentativa de remoção de conexão negada para {RequesterId}", requesterId);
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Você não tem permissão para remover esta conexão.");
+            }
+
+            try
+            {
+                context.Connections.Remove(connection);
+                await context.SaveChangesAsync();
+                logger.LogInformation("Conexão {ConnId} removida com sucesso por {RequesterId}", connectionId, requesterId);
+                return new ServiceResultDto<bool>(true, true, "Conexão removida com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao remover conexão {ConnId}", connectionId);
+                return new ServiceResultDto<bool>(false, false, "Erro interno ao remover conexão.");
+            }
+        }
+
+        /// <summary>
+        /// Atualiza uma conexão existente.
+        /// Regras de Acesso: Administradores de Sistema podem atualizar qualquer conexão; Membros podem atualizar se a conexão pertencer a uma organização na qual são membros.
+        /// </summary>
+        public async Task<ServiceResultDto<bool>> UpdateConnectionAsync(UpdateConnectionDto dto)
+        {
+            logger.LogInformation("Solicitação de atualização da conexão {ConnId} por {RequesterId}", dto.ConnectionId, dto.RequesterId);
+
+            var requester = await userManager.FindByIdAsync(dto.RequesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<bool>(false, false, "Solicitante inválido ou inativo.");
+            }
+
+            var connection = await context.Connections.FindAsync(dto.ConnectionId);
+            if (connection == null)
+            {
+                return new ServiceResultDto<bool>(false, false, "Conexão não encontrada.");
+            }
+
+            bool hasPermission = false;
+            if (await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                hasPermission = true;
+            }
+            else
+            {
+                var isMember = await context.Organizations
+                    .AnyAsync(o => o.Id == connection.OrganizationId && o.Users.Any(u => u.Id == dto.RequesterId));
+
+                if (isMember)
+                {
+                    hasPermission = true;
+                }
+            }
+
+            if (!hasPermission)
+            {
+                return new ServiceResultDto<bool>(false, false, "Acesso negado: Você não tem permissão para editar esta conexão.");
+            }
+
+            // Se mudar os dispositivos, valida se eles são da mesma organização e se não é auto-conexão
+            Guid finalSource = dto.SourceDeviceId ?? connection.SourceDeviceId;
+            Guid finalDest = dto.DestinationDeviceId ?? connection.DestinationDeviceId;
+
+            if (finalSource == finalDest)
+            {
+                return new ServiceResultDto<bool>(false, false, "Não é possível conectar um dispositivo a ele mesmo.");
+            }
+
+            if (dto.SourceDeviceId.HasValue || dto.DestinationDeviceId.HasValue)
+            {
+                var source = await context.Devices.FindAsync(finalSource);
+                var dest = await context.Devices.FindAsync(finalDest);
+
+                if (source == null || dest == null)
+                {
+                    return new ServiceResultDto<bool>(false, false, "Dispositivo não encontrado.");
+                }
+
+                if (source.OrganizationId != connection.OrganizationId || dest.OrganizationId != connection.OrganizationId)
+                {
+                    return new ServiceResultDto<bool>(false, false, "Os dispositivos devem pertencer à mesma organização da conexão original.");
+                }
+            }
+
+            // Atualiza campos
+            if (dto.SourceDeviceId.HasValue) connection.SourceDeviceId = dto.SourceDeviceId.Value;
+            if (dto.SourceInterface != null) connection.SourceInterface = dto.SourceInterface;
+            if (dto.DestinationDeviceId.HasValue) connection.DestinationDeviceId = dto.DestinationDeviceId.Value;
+            if (dto.DestinationInterface != null) connection.DestinationInterface = dto.DestinationInterface;
+            if (dto.Type.HasValue) connection.Type = dto.Type.Value;
+            if (dto.Speed != null) connection.Speed = dto.Speed;
+
+            try
+            {
+                await context.SaveChangesAsync();
+                logger.LogInformation("Conexão {ConnId} atualizada com sucesso por {RequesterId}", dto.ConnectionId, dto.RequesterId);
+                return new ServiceResultDto<bool>(true, true, "Conexão atualizada com sucesso.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erro ao atualizar conexão {ConnId}", dto.ConnectionId);
+                return new ServiceResultDto<bool>(false, false, "Erro interno ao atualizar conexão.");
+            }
+        }
+
+        #endregion
     }
 }

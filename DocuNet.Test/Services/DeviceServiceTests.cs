@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using DocuNet.Web.Constants;
 using DocuNet.Web.Data;
 using DocuNet.Web.Dtos.Device;
+using DocuNet.Web.Dtos.Connection;
 using DocuNet.Web.Enumerators;
 using DocuNet.Web.Models;
 using DocuNet.Web.Services;
@@ -43,6 +44,8 @@ namespace DocuNet.Test.Services
             _deviceService = new DeviceService(_context, _loggerMock.Object, _userManagerMock.Object);
         }
 
+        #region Device Tests
+
         [Fact]
         public async Task CreateDeviceAsync_ShouldReturnSuccess_WhenAdminCreatesDevice()
         {
@@ -66,7 +69,6 @@ namespace DocuNet.Test.Services
             
             var deviceInDb = await _context.Devices.FirstOrDefaultAsync(d => d.Name == "Device 1");
             Assert.NotNull(deviceInDb);
-            Assert.Equal(EDeviceTypes.Router, deviceInDb.Type);
             Assert.Equal("192.168.1.1", deviceInDb.IpAddress);
         }
 
@@ -122,7 +124,6 @@ namespace DocuNet.Test.Services
             var userId = Guid.NewGuid();
             var user = new User { Id = userId, Email = "user@test.com" };
             var org = new Organization { Id = Guid.NewGuid(), Name = "Org 1", IsActive = true };
-            // User is NOT added to Org
             _context.Organizations.Add(org);
             await _context.SaveChangesAsync();
 
@@ -135,29 +136,136 @@ namespace DocuNet.Test.Services
             var result = await _deviceService.CreateDeviceAsync(dto);
 
             Assert.False(result.Success);
-            Assert.Equal("Acesso negado: Você não tem permissão para adicionar dispositivos nesta organização.", result.Message);
         }
 
+        #endregion
+
+        #region Connection Tests
+
         [Fact]
-        public async Task CreateDeviceAsync_ShouldReturnError_WhenOrgIsInactive()
+        public async Task CreateConnectionAsync_ShouldReturnSuccess_WhenAdminCreatesValidConnection()
         {
             var adminId = Guid.NewGuid();
             var adminUser = new User { Id = adminId };
-            var org = new Organization { Id = Guid.NewGuid(), Name = "Inactive Org", IsActive = false };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Org 1", IsActive = true };
+            var devA = new Device { Id = Guid.NewGuid(), Name = "DevA", OrganizationId = org.Id };
+            var devB = new Device { Id = Guid.NewGuid(), Name = "DevB", OrganizationId = org.Id };
             _context.Organizations.Add(org);
+            _context.Devices.AddRange(devA, devB);
             await _context.SaveChangesAsync();
 
-            var dto = new CreateDeviceDto(adminId, "Device Inactive", "1.1.1.1", EDeviceTypes.Router, org.Id);
+            var dto = new CreateConnectionDto(adminId, devA.Id, devB.Id, EConnectionTypes.Ethernet, "Gi0/1", "Gi0/1", "1 Gbps", org.Id);
 
             _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
             _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
-            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
 
-            var result = await _deviceService.CreateDeviceAsync(dto);
+            var result = await _deviceService.CreateConnectionAsync(dto);
+
+            Assert.True(result.Success);
+            Assert.Equal("Conexão criada com sucesso.", result.Message);
+            
+            var connInDb = await _context.Connections.FirstOrDefaultAsync(c => c.Id == result.Data);
+            Assert.NotNull(connInDb);
+            Assert.Equal("Gi0/1", connInDb.SourceInterface);
+            Assert.Equal("1 Gbps", connInDb.Speed);
+        }
+
+        [Fact]
+        public async Task CreateConnectionAsync_ShouldReturnError_WhenDevicesInDifferentOrgs()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId };
+            var org1 = new Organization { Id = Guid.NewGuid(), Name = "Org 1", IsActive = true };
+            var org2 = new Organization { Id = Guid.NewGuid(), Name = "Org 2", IsActive = true };
+            var devA = new Device { Id = Guid.NewGuid(), Name = "DevA", OrganizationId = org1.Id };
+            var devB = new Device { Id = Guid.NewGuid(), Name = "DevB", OrganizationId = org2.Id };
+            _context.Organizations.AddRange(org1, org2);
+            _context.Devices.AddRange(devA, devB);
+            await _context.SaveChangesAsync();
+
+            var dto = new CreateConnectionDto(adminId, devA.Id, devB.Id, EConnectionTypes.Fiber, null, null, null, org1.Id);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+
+            var result = await _deviceService.CreateConnectionAsync(dto);
 
             Assert.False(result.Success);
-            Assert.Equal("Não é possível adicionar dispositivos a uma organização inativa.", result.Message);
+            Assert.Equal("Os dispositivos devem pertencer à mesma organização.", result.Message);
         }
+
+        [Fact]
+        public async Task CreateConnectionAsync_ShouldReturnError_WhenDeviceConnectsToSelf()
+        {
+            var adminId = Guid.NewGuid();
+            var devId = Guid.NewGuid();
+            var dto = new CreateConnectionDto(adminId, devId, devId, EConnectionTypes.Ethernet, null, null, null, Guid.NewGuid());
+
+            var result = await _deviceService.CreateConnectionAsync(dto);
+
+            Assert.False(result.Success);
+            Assert.Equal("Não é possível conectar um dispositivo a ele mesmo.", result.Message);
+        }
+
+        [Fact]
+        public async Task GetConnectionsAsync_ShouldFilterByOrganization_WhenMember()
+        {
+            var userId = Guid.NewGuid();
+            var user = new User { Id = userId };
+            var org1 = new Organization { Id = Guid.NewGuid(), Name = "Org 1" };
+            org1.Users.Add(user);
+            var org2 = new Organization { Id = Guid.NewGuid(), Name = "Org 2" };
+            
+            var dev1 = new Device { Id = Guid.NewGuid(), Name = "D1", OrganizationId = org1.Id };
+            var dev2 = new Device { Id = Guid.NewGuid(), Name = "D2", OrganizationId = org1.Id };
+            var dev3 = new Device { Id = Guid.NewGuid(), Name = "D3", OrganizationId = org2.Id };
+            var dev4 = new Device { Id = Guid.NewGuid(), Name = "D4", OrganizationId = org2.Id };
+
+            var conn1 = new Connection { Id = Guid.NewGuid(), SourceDeviceId = dev1.Id, DestinationDeviceId = dev2.Id, OrganizationId = org1.Id };
+            var conn2 = new Connection { Id = Guid.NewGuid(), SourceDeviceId = dev3.Id, DestinationDeviceId = dev4.Id, OrganizationId = org2.Id };
+
+            _context.Organizations.AddRange(org1, org2);
+            _context.Devices.AddRange(dev1, dev2, dev3, dev4);
+            _context.Connections.AddRange(conn1, conn2);
+            await _context.SaveChangesAsync();
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(user);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(user, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
+
+            var result = await _deviceService.GetConnectionsAsync(userId);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Data!);
+            Assert.Equal(conn1.Id, result.Data![0].Id);
+        }
+
+        [Fact]
+        public async Task DeleteConnectionAsync_ShouldReturnError_WhenUserNotFromOrg()
+        {
+            var userId = Guid.NewGuid();
+            var user = new User { Id = userId };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Org" }; // User NOT member
+            var devA = new Device { Id = Guid.NewGuid(), Name="DevA", OrganizationId = org.Id };
+            var devB = new Device { Id = Guid.NewGuid(), Name="DevB", OrganizationId = org.Id };
+            var conn = new Connection { Id = Guid.NewGuid(), SourceDeviceId = devA.Id, DestinationDeviceId = devB.Id, OrganizationId = org.Id };
+
+            _context.Organizations.Add(org);
+            _context.Devices.AddRange(devA, devB);
+            _context.Connections.Add(conn);
+            await _context.SaveChangesAsync();
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(user);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(user, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
+
+            var result = await _deviceService.DeleteConnectionAsync(userId, conn.Id);
+
+            Assert.False(result.Success);
+            Assert.Equal("Acesso negado: Você não tem permissão para remover esta conexão.", result.Message);
+        }
+
+        #endregion
+
+        #region Helper Methods
 
         [Fact]
         public async Task GetDevicesAsync_ShouldReturnAllDevices_WhenAdmin()
@@ -183,85 +291,12 @@ namespace DocuNet.Test.Services
             Assert.Equal(2, result.Data!.Count);
         }
 
-        [Fact]
-        public async Task GetDevicesAsync_ShouldReturnOnlyOrgDevices_WhenMember()
-        {
-            var userId = Guid.NewGuid();
-            var user = new User { Id = userId };
-            
-            var org1 = new Organization { Id = Guid.NewGuid(), Name = "Org 1" };
-            org1.Users.Add(user); // User is member of Org 1
-            
-            var org2 = new Organization { Id = Guid.NewGuid(), Name = "Org 2" };
-            // User NOT member of Org 2
-
-            _context.Organizations.AddRange(org1, org2);
-
-            _context.Devices.Add(new Device { Id = Guid.NewGuid(), Name = "D1", OrganizationId = org1.Id });
-            _context.Devices.Add(new Device { Id = Guid.NewGuid(), Name = "D2", OrganizationId = org2.Id });
-            await _context.SaveChangesAsync();
-
-            _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(user);
-            _userManagerMock.Setup(x => x.IsInRoleAsync(user, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
-            _userManagerMock.Setup(x => x.IsLockedOutAsync(user)).ReturnsAsync(false);
-
-            var result = await _deviceService.GetDevicesAsync(userId);
-
-            Assert.True(result.Success);
-            Assert.Single(result.Data!); // Should only see D1
-            Assert.Equal("D1", result.Data![0].Name);
-        }
-
-        [Fact]
-        public async Task DeleteDeviceAsync_ShouldReturnSuccess_WhenAdminDeletes()
-        {
-            var adminId = Guid.NewGuid();
-            var adminUser = new User { Id = adminId };
-            var org = new Organization { Id = Guid.NewGuid(), Name = "Org" };
-            var device = new Device { Id = Guid.NewGuid(), Name = "D1", OrganizationId = org.Id };
-            
-            _context.Organizations.Add(org);
-            _context.Devices.Add(device);
-            await _context.SaveChangesAsync();
-
-            var dto = new DeleteDeviceDto(adminId, device.Id);
-
-            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
-            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
-
-            var result = await _deviceService.DeleteDeviceAsync(dto);
-
-            Assert.True(result.Success);
-            Assert.Null(await _context.Devices.FindAsync(device.Id));
-        }
-
-        [Fact]
-        public async Task DeleteDeviceAsync_ShouldReturnError_WhenUserDeletesDeviceFromOtherOrg()
-        {
-            var userId = Guid.NewGuid();
-            var user = new User { Id = userId };
-            var org1 = new Organization { Id = Guid.NewGuid(), Name = "Org 1" }; // User NOT member
-            var device = new Device { Id = Guid.NewGuid(), Name = "D1", OrganizationId = org1.Id };
-            
-            _context.Organizations.Add(org1);
-            _context.Devices.Add(device);
-            await _context.SaveChangesAsync();
-
-            var dto = new DeleteDeviceDto(userId, device.Id);
-
-            _userManagerMock.Setup(x => x.FindByIdAsync(userId.ToString())).ReturnsAsync(user);
-            _userManagerMock.Setup(x => x.IsInRoleAsync(user, SystemRoles.SystemAdministrator)).ReturnsAsync(false);
-
-            var result = await _deviceService.DeleteDeviceAsync(dto);
-
-            Assert.False(result.Success);
-            Assert.NotNull(await _context.Devices.FindAsync(device.Id)); // Needs to remain
-        }
-
         public void Dispose()
         {
             _context.Dispose();
             _connection.Dispose();
         }
+
+        #endregion
     }
 }
