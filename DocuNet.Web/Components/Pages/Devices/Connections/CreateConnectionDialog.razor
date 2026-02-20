@@ -1,0 +1,214 @@
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Dtos.Connection
+@using DocuNet.Web.Dtos.Device
+@using DocuNet.Web.Enumerators
+@using DocuNet.Web.Services
+@using DocuNet.Web.States
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.ComponentModel.DataAnnotations
+@using System.Reflection
+
+@inject DeviceService DeviceService
+@inject OrganizationState OrganizationState
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudGrid>
+                <!-- Origem (Esquerda) -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="0" Class="pa-4 grey lighten-5">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-2">Origem (Ponta A)</MudText>
+                        <MudStack Spacing="3">
+                            <MudSelect T="Guid" Label="Dispositivo" @bind-Value="sourceDeviceId" Required="true" RequiredError="Obrigatório." Variant="Variant.Outlined">
+                                @foreach (var device in _devices)
+                                {
+                                    <MudSelectItem Value="@device.Id">
+                                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@DeviceIcons.GetMudIcon(device.Type)" Color="@DeviceIcons.GetColor(device.Type)" Size="Size.Small" />
+                                            <MudText>@device.Name</MudText>
+                                        </MudStack>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudTextField @bind-Value="sourceInterface" Label="Interface / Porta" MaxLength="50" Placeholder="ex: Gi0/1" Variant="Variant.Outlined" />
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Destino (Direita) -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="0" Class="pa-4 grey lighten-5">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-2">Destino (Ponta B)</MudText>
+                        <MudStack Spacing="3">
+                            <MudSelect T="Guid" Label="Dispositivo" @bind-Value="destinationDeviceId" Required="true" RequiredError="Obrigatório." Variant="Variant.Outlined">
+                                @foreach (var device in _devices.Where(d => d.Id != sourceDeviceId))
+                                {
+                                    <MudSelectItem Value="@device.Id">
+                                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@DeviceIcons.GetMudIcon(device.Type)" Color="@DeviceIcons.GetColor(device.Type)" Size="Size.Small" />
+                                            <MudText>@device.Name</MudText>
+                                        </MudStack>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudTextField @bind-Value="destinationInterface" Label="Interface / Porta" MaxLength="50" Placeholder="ex: eth0" Variant="Variant.Outlined" />
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- Detalhes da Conexão (Centralizado) -->
+                <MudItem xs="12">
+                    <MudPaper Elevation="0" Class="pa-4 border-t-1 pt-4">
+                        <MudGrid>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="EConnectionTypes" @bind-Value="type" Label="Tipo de Conexão" Required="true" Variant="Variant.Outlined" Dense="true">
+                                     @foreach (EConnectionTypes t in Enum.GetValues(typeof(EConnectionTypes)))
+                                     {
+                                         <MudSelectItem Value="@t">
+                                             <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                                 <MudIcon Icon="@ConnectionIcons.GetIcon(t)" Color="@ConnectionIcons.GetColor(t)" Size="Size.Small" />
+                                                 <MudText>@GetEnumDisplayName(t)</MudText>
+                                             </MudStack>
+                                         </MudSelectItem>
+                                     }
+                                 </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="EConnectionSpeeds" Value="selectedSpeed" ValueChanged="OnSpeedChanged" Label="Velocidade Padrão" Variant="Variant.Outlined" Dense="true">
+                                    @foreach (EConnectionSpeeds s in Enum.GetValues(typeof(EConnectionSpeeds)))
+                                    {
+                                        <MudSelectItem Value="@s">@GetEnumDisplayName(s)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudTextField @bind-Value="speed" Label="Velocidade Final" MaxLength="50" Placeholder="ex: 1 Gbps" Variant="Variant.Outlined" Dense="true" ReadOnly="@(selectedSpeed != EConnectionSpeeds.Other)" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!success || _processing)">
+            @if (_processing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Salvando...</MudText>
+            }
+            else
+            {
+                <MudText>Conectar</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private Guid sourceDeviceId;
+    private string? sourceInterface;
+    private Guid destinationDeviceId;
+    private string? destinationInterface;
+    private EConnectionTypes type = EConnectionTypes.Ethernet;
+    private string? speed;
+    private EConnectionSpeeds selectedSpeed = EConnectionSpeeds.Gigabit1G;
+
+    private List<DeviceSummaryDto> _devices = new();
+    private MudForm form = default!;
+    private bool success;
+    private bool _processing;
+    private Guid userId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (Guid.TryParse(userIdStr, out var uId) && OrganizationState.CurrentOrganization != null)
+        {
+            userId = uId;
+            var result = await DeviceService.GetDevicesAsync(userId);
+            if (result.Success)
+            {
+                _devices = result.Data!.Where(d => d.OrganizationId == OrganizationState.CurrentOrganization.Id).ToList();
+            }
+        }
+
+        // Inicializa a velocidade baseada no enum padrão
+        speed = GetEnumDisplayName(selectedSpeed);
+    }
+
+    private void OnSpeedChanged(EConnectionSpeeds value)
+    {
+        selectedSpeed = value;
+        if (value != EConnectionSpeeds.Other)
+        {
+            speed = GetEnumDisplayName(value);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await form.Validate();
+        if (form.IsValid)
+        {
+            if (sourceDeviceId == destinationDeviceId)
+            {
+                Snackbar.Add("Selecione dispositivos diferentes para a conexão.", Severity.Warning);
+                return;
+            }
+
+            _processing = true;
+            try
+            {
+                var dto = new CreateConnectionDto(
+                    userId,
+                    sourceDeviceId,
+                    destinationDeviceId,
+                    type,
+                    sourceInterface,
+                    destinationInterface,
+                    speed,
+                    OrganizationState.CurrentOrganization!.Id
+                );
+
+                var result = await DeviceService.CreateConnectionAsync(dto);
+                if (result.Success)
+                {
+                    Snackbar.Add(result.Message, Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Message, Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erro: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _processing = false;
+            }
+        }
+    }
+
+    private string GetEnumDisplayName(Enum value)
+    {
+        return value.GetType().GetField(value.ToString())?
+            .GetCustomAttribute<DisplayAttribute>()?
+            .Name ?? value.ToString();
+    }
+}

@@ -1,0 +1,217 @@
+@page "/devices/connections"
+@using Microsoft.AspNetCore.Authorization
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Services
+@using DocuNet.Web.Dtos.Connection
+@using DocuNet.Web.Enumerators
+@using DocuNet.Web.States
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.ComponentModel.DataAnnotations
+@using System.Reflection
+
+@attribute [Authorize]
+@implements IDisposable
+@inject DeviceService DeviceService
+@inject OrganizationState OrganizationState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Conexões de Rede</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Conexões de Rede</MudText>
+
+@if (OrganizationState.CurrentOrganization == null)
+{
+    <MudAlert Severity="Severity.Info">Selecione uma organização no menu acima para visualizar as conexões.</MudAlert>
+}
+else
+{
+    <MudPaper Elevation="4" Class="pa-4">
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudText Typo="Typo.h6">Lista de Conexões</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                Nova Conexão
+            </MudButton>
+        </MudStack>
+
+        <MudTable Items="@_connections" Loading="@_loading" Hover="true" Bordered="false" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Origem</MudTh>
+                <MudTh Style="text-align: center"><MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Size="Size.Small" /></MudTh>
+                <MudTh>Destino</MudTh>
+                <MudTh>Tipo</MudTh>
+                <MudTh>Velocidade</MudTh>
+                <MudTh Style="text-align: right">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Origem">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600">@context.SourceDeviceName</MudText>
+                        @if (!string.IsNullOrEmpty(context.SourceInterface))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Porta: @context.SourceInterface</MudText>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd Style="text-align: center">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" Color="Color.Default" />
+                </MudTd>
+                <MudTd DataLabel="Destino">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600">@context.DestinationDeviceName</MudText>
+                        @if (!string.IsNullOrEmpty(context.DestinationInterface))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Porta: @context.DestinationInterface</MudText>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Tipo">
+                    <MudChip T="string" 
+                             Size="Size.Small" 
+                             Variant="Variant.Filled" 
+                             Color="@ConnectionIcons.GetColor(context.Type)" 
+                             Icon="@ConnectionIcons.GetIcon(context.Type)">
+                        @GetDisplayName(context.Type)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Velocidade">
+                    <MudText Typo="Typo.body2">@(context.Speed ?? "-")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right">
+                    <MudTooltip Text="Editar">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenUpdateDialog(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Excluir">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteConnection(context.Id))" />
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>Nenhuma conexão encontrada para esta organização.</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>Carregando conexões...</MudText>
+            </LoadingContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private List<ConnectionSummaryDto> _connections = new();
+    private bool _loading = true;
+    private Guid _requesterId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        OrganizationState.OnChange += HandleOrganizationChange;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var guid))
+        {
+            _requesterId = guid;
+            await LoadConnections();
+        }
+    }
+
+    private async void HandleOrganizationChange()
+    {
+        await LoadConnections();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadConnections()
+    {
+        if (OrganizationState.CurrentOrganization == null || _requesterId == Guid.Empty)
+        {
+            _connections.Clear();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var result = await DeviceService.GetConnectionsAsync(_requesterId);
+            if (result.Success && result.Data != null)
+            {
+                _connections = result.Data.Where(c => c.OrganizationId == OrganizationState.CurrentOrganization.Id).ToList();
+            }
+            else if (!result.Success)
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao carregar conexões: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateConnectionDialog>("Nova Conexão", options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            await LoadConnections();
+        }
+    }
+
+    private async Task OpenUpdateDialog(ConnectionSummaryDto connection)
+    {
+        var parameters = new DialogParameters { { "Connection", connection } };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<UpdateConnectionDialog>("Editar Conexão", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result!.Canceled)
+        {
+            await LoadConnections();
+        }
+    }
+
+    private async Task DeleteConnection(Guid id)
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Confirmar Exclusão", 
+            "Deseja realmente remover esta conexão?", 
+            yesText: "Excluir", 
+            cancelText: "Cancelar");
+
+        if (confirm == true && _requesterId != Guid.Empty)
+        {
+            var deleteResult = await DeviceService.DeleteConnectionAsync(_requesterId, id);
+            if (deleteResult.Success)
+            {
+                Snackbar.Add(deleteResult.Message, Severity.Success);
+                await LoadConnections();
+            }
+            else
+            {
+                Snackbar.Add(deleteResult.Message, Severity.Error);
+            }
+        }
+    }
+
+    private string GetDisplayName(Enum value)
+    {
+        var field = value.GetType().GetField(value.ToString());
+        if (field == null) return value.ToString();
+        var attr = field.GetCustomAttribute<DisplayAttribute>();
+        return attr?.Name ?? value.ToString();
+    }
+
+    public void Dispose()
+    {
+        OrganizationState.OnChange -= HandleOrganizationChange;
+    }
+}

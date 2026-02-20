@@ -44,7 +44,12 @@ else
                 <MudTh Style="text-align: right">Ações</MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Nome">@context.Name</MudTd>
+                <MudTd DataLabel="Nome">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@DeviceIcons.GetMudIcon(context.Type)" Color="@DeviceIcons.GetColor(context.Type)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Style="font-weight: 500">@context.Name</MudText>
+                    </MudStack>
+                </MudTd>
                 <MudTd DataLabel="Endereço IP">@context.IpAddress</MudTd>
                 <MudTd DataLabel="Tipo">
                     <MudChip T="string" Size="Size.Small" Color="@DeviceIcons.GetColor(context.Type)" Icon="@DeviceIcons.GetMudIcon(context.Type)">
