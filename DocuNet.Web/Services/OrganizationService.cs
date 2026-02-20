@@ -321,5 +321,41 @@ namespace DocuNet.Web.Services
 
             return new ServiceResultDto<List<UserSummaryDto>>(true, summaries, "Membros carregados com sucesso.");
         }
+        /// <summary>
+        /// Obtém a lista de organizações disponíveis para o usuário (Todas se Admin, apenas as vinculadas se Membro).
+        /// </summary>
+        public async Task<ServiceResultDto<List<OrganizationSummaryDto>>> GetAvailableOrganizationsAsync(Guid requesterId)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<List<OrganizationSummaryDto>>(false, [], "Acesso negado ou conta inativa.");
+            }
+
+            List<Organization> organizations;
+
+            if (await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator))
+            {
+                // Admin vê todas
+                organizations = await context.Organizations.Include(o => o.Users).ToListAsync();
+            }
+            else
+            {
+                // Membro vê apenas as suas
+                organizations = await context.Organizations
+                    .Include(o => o.Users)
+                    .Where(o => o.Users.Any(u => u.Id == requesterId))
+                    .ToListAsync();
+            }
+
+            var summaries = organizations.Select(o => new OrganizationSummaryDto(
+                o.Id,
+                o.Name,
+                o.IsActive,
+                o.Users.Count
+            )).ToList();
+
+            return new ServiceResultDto<List<OrganizationSummaryDto>>(true, summaries, "Organizações carregadas com sucesso.");
+        }
     }
 }

@@ -4,6 +4,7 @@ using DocuNet.Web.Data;
 using DocuNet.Web.Models;
 using DocuNet.Web.Services;
 using DocuNet.Web.Extensions;
+using DocuNet.Web.States;
 using Microsoft.AspNetCore.Identity;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,7 @@ namespace DocuNet.Web
             builder.Services.AddScoped<UserService>();
             builder.Services.AddScoped<OrganizationService>();
             builder.Services.AddScoped<DeviceService>();
+            builder.Services.AddScoped<OrganizationState>();
             var app = builder.Build();
 
             if (!app.Environment.IsDevelopment())
