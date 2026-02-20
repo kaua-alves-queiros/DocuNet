@@ -30,6 +30,7 @@
             <AuthorizeView Roles="@SystemRoles.SystemAdministrator">
                 <Authorized>
                     <MudNavLink Match="NavLinkMatch.All" Href="/users">Usuarios</MudNavLink>
+                    <MudNavLink Match="NavLinkMatch.All" Href="/organizations">Organizações</MudNavLink>
                 </Authorized>
             </AuthorizeView>
             <MudSwitch @bind-Value="_isDarkMode" UncheckedColor="@Color.Dark" Color="@Color.Primary">Modo Escuro</MudSwitch>

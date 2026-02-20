@@ -1,0 +1,158 @@
+@page "/organizations"
+@using Microsoft.AspNetCore.Authorization
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Services
+@using DocuNet.Web.Dtos.Organization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = SystemRoles.SystemAdministrator)]
+@inject OrganizationService OrganizationService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>Gestão de Organizações</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Gestão de Organizações</MudText>
+
+<MudPaper Elevation="4" Class="pa-4">
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h6">Lista de Organizações</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+            Nova Organização
+        </MudButton>
+    </MudStack>
+
+    <MudTable Items="@_organizations" Loading="@_loading" Hover="true" Bordered="false" Striped="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Membros</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align: right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="Membros">
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => OpenMembersDialog(context))">
+                    @context.MemberCount Membros
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Ativa</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Inativa</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Ações" Style="text-align: right">
+                <MudTooltip Text="Gerenciar Membros">
+                     <MudIconButton Icon="@Icons.Material.Filled.Group" Color="Color.Info" OnClick="@(() => OpenMembersDialog(context))" />
+                </MudTooltip>
+                <MudTooltip Text="Renomear">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenRenameDialog(context))" />
+                </MudTooltip>
+                @if (context.IsActive)
+                {
+                    <MudTooltip Text="Desativar">
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Color="Color.Error" OnClick="@(() => ToggleStatus(context))" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudTooltip Text="Ativar">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" OnClick="@(() => ToggleStatus(context))" />
+                    </MudTooltip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>Nenhuma organização encontrada.</MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText>Carregando organizações...</MudText>
+        </LoadingContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private List<OrganizationSummaryDto> _organizations = new();
+    private bool _loading = true;
+    private Guid _requesterId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var guid))
+        {
+            _requesterId = guid;
+        }
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var result = await OrganizationService.GetAllOrganizationsAsync(_requesterId);
+        if (result.Success)
+        {
+            _organizations = result.Data ?? new();
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId };
+        var dialog = await DialogService.ShowAsync<CreateOrganizationDialog>("Nova Organização", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadData();
+    }
+
+    private async Task OpenRenameDialog(OrganizationSummaryDto org)
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId, ["OrganizationId"] = org.Id, ["CurrentName"] = org.Name };
+        var dialog = await DialogService.ShowAsync<RenameOrganizationDialog>("Renomear Organização", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadData();
+    }
+
+    private async Task OpenMembersDialog(OrganizationSummaryDto org)
+    {
+        var parameters = new DialogParameters { ["RequesterId"] = _requesterId, ["OrganizationId"] = org.Id, ["OrganizationName"] = org.Name };
+        var dialog = await DialogService.ShowAsync<ManageOrganizationMembersDialog>("Gerenciar Membros", parameters);
+        var result = await dialog.Result;
+        // Reload in case count changed
+        await LoadData();
+    }
+
+    private async Task ToggleStatus(OrganizationSummaryDto org)
+    {
+        var newStatus = !org.IsActive;
+        var action = newStatus ? "ativar" : "desativar";
+        var confirm = await DialogService.ShowMessageBox("Confirmar", $"Deseja realmente {action} a organização {org.Name}?", yesText: "Sim", noText: "Não");
+        
+        if (confirm == true)
+        {
+             var result = await OrganizationService.ManageOrganizationStatusAsync(new ManageOrganizationStatusDto(_requesterId, org.Id, newStatus));
+            if (result.Success)
+            {
+                Snackbar.Add(result.Message, Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+    }
+}
