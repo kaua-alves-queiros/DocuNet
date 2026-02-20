@@ -1,0 +1,16 @@
+@using DocuNet.Web.Constants
+
+<MudStack Class="absolute pa-4" Style="top: 0; left: 0; z-index: 100;" Spacing="2">
+    <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="OnRefresh" Tooltip="Recarregar" />
+    <MudFab Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="OnCreateDevice" Tooltip="Novo Dispositivo" />
+    <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.Link" Size="Size.Small" OnClick="OnCreateConnection" Tooltip="Nova Conexão" />
+    <MudFab Color="Color.Surface" StartIcon="@(DrawerOpen ? Icons.Material.Filled.ChevronRight : Icons.Material.Filled.MenuOpen)" Size="Size.Small" OnClick="OnToggleDrawer" Tooltip="Alternar Menu" />
+</MudStack>
+
+@code {
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public EventCallback OnCreateDevice { get; set; }
+    [Parameter] public EventCallback OnCreateConnection { get; set; }
+    [Parameter] public EventCallback OnToggleDrawer { get; set; }
+    [Parameter] public bool DrawerOpen { get; set; }
+}

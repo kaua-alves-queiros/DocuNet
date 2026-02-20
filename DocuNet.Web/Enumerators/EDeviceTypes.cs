@@ -28,6 +28,9 @@ namespace DocuNet.Web.Enumerators
         [Display(Name = "Roteador Wi-Fi")]
         WifiRouter,
 
+        [Display(Name = "Impressora")]
+        Printer,
+
         [Display(Name = "Especificações / Outros")]
         Specs
     }

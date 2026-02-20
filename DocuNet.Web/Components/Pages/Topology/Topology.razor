@@ -1,0 +1,349 @@
+@page "/devices/topology"
+@using Microsoft.AspNetCore.Authorization
+@using DocuNet.Web.Constants
+@using DocuNet.Web.Services
+@using DocuNet.Web.Dtos.Device
+@using DocuNet.Web.Dtos.Connection
+@using DocuNet.Web.States
+@using Microsoft.JSInterop
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using DocuNet.Web.ViewModels
+@using DocuNet.Web.Components.Pages.Connections
+@using DocuNet.Web.Components.Pages.Devices
+@using DocuNet.Web.Components.Pages.Topology.TopologyComponents
+
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject DeviceService DeviceService
+@inject OrganizationState OrganizationState
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Topologia de Rede</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Topologia de Rede</MudText>
+
+@if (OrganizationState.CurrentOrganization == null)
+{
+    <MudAlert Severity="Severity.Info">Selecione uma organização para visualizar a topologia.</MudAlert>
+}
+else
+{
+    <div class="relative flex-grow-1 d-flex flex-row overflow-hidden" style="height: calc(100vh - 200px); border-radius: 8px;">
+        <div class="flex-grow-1 relative h-100">
+            <TopologyMap Loading="@_loading" />
+
+            <TopologyControls 
+                OnRefresh="LoadTopology"
+                OnCreateDevice="OpenCreateDeviceDialog"
+                OnCreateConnection="OpenCreateConnectionDialog"
+                OnToggleDrawer="@(() => _drawerOpen = !_drawerOpen)"
+                DrawerOpen="@_drawerOpen" />
+        </div>
+
+        <TopologyExplorer 
+            @bind-DrawerOpen="@_drawerOpen"
+            SelectedElement="@_selectedElement"
+            SelectedElementType="@_selectedElementType"
+            Devices="@_allDevices"
+            Connections="@_allConnections"
+            OnEdit="OnEditSelected"
+            OnDelete="OnDeleteSelected"
+            OnFocus="FocusElement" />
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private Guid _requesterId = Guid.Empty;
+    private bool _drawerOpen = true;
+    private string? _selectedElementType;
+    private SelectedElement? _selectedElement;
+    private DotNetObjectReference<Topology>? _objRef;
+    private List<DeviceSummaryDto> _allDevices = new();
+    private List<ConnectionSummaryDto> _allConnections = new();
+
+    private async Task FocusElement(string id)
+    {
+        await JS.InvokeVoidAsync("topology.focusElement", id);
+    }
+
+    [JSInvokable]
+    public void OnElementSelected(string? type, SelectedElement? element)
+    {
+        _selectedElementType = type;
+        _selectedElement = element;
+        StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+        OrganizationState.OnChange += HandleOrganizationChange;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var guid))
+        {
+            _requesterId = guid;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && OrganizationState.CurrentOrganization != null)
+        {
+            await LoadTopology();
+        }
+    }
+
+    private async void HandleOrganizationChange()
+    {
+        await LoadTopology();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadTopology()
+    {
+        if (OrganizationState.CurrentOrganization == null || _requesterId == Guid.Empty) return;
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var devicesResult = await DeviceService.GetDevicesAsync(_requesterId);
+            var connectionsResult = await DeviceService.GetConnectionsAsync(_requesterId);
+
+            if (devicesResult.Success && connectionsResult.Success)
+            {
+                var orgId = OrganizationState.CurrentOrganization.Id;
+                
+                _allDevices = devicesResult.Data!
+                    .Where(d => d.OrganizationId == orgId)
+                    .OrderBy(d => d.Name)
+                    .ToList();
+
+                _allConnections = connectionsResult.Data!
+                    .Where(c => c.OrganizationId == orgId)
+                    .OrderBy(c => c.SourceDeviceName)
+                    .ThenBy(c => GetPortNumber(c.SourceInterface))
+                    .ThenBy(c => c.SourceInterface)
+                    .ToList();
+
+                var elements = new List<object>();
+                var processedDeviceIds = new HashSet<string>();
+                
+                var sourceIds = _allConnections.Select(c => c.SourceDeviceId).ToHashSet();
+                var targetIds = _allConnections.Select(c => c.DestinationDeviceId).ToHashSet();
+                var rootDevices = _allDevices.Where(d => !targetIds.Contains(d.Id)).ToList();
+                
+                if (!rootDevices.Any()) rootDevices = _allDevices.Take(1).ToList();
+
+                void ProcessHierarchy(Guid deviceId, int depth, int orderInParent)
+                {
+                    if (processedDeviceIds.Contains(deviceId.ToString())) return;
+                    processedDeviceIds.Add(deviceId.ToString());
+
+                    var device = _allDevices.FirstOrDefault(d => d.Id == deviceId);
+                    if (device == null) return;
+
+                    elements.Add(new {
+                        data = new {
+                            id = device.Id.ToString(),
+                            label = device.Name,
+                            ip = device.IpAddress ?? "",
+                            icon = DeviceIcons.GetIcon(device.Type),
+                            color = ColorToHex(DeviceIcons.GetColor(device.Type)),
+                            type = device.Type, // Para ajudar na edição
+                            level = depth,
+                            sortWeight = orderInParent
+                        }
+                    });
+
+                    var children = _allConnections
+                        .Where(c => c.SourceDeviceId == deviceId)
+                        .OrderBy(c => GetPortNumber(c.SourceInterface))
+                        .ToList();
+
+                    for (int i = 0; i < children.Count; i++)
+                    {
+                        var conn = children[i];
+                        elements.Add(new {
+                            data = new {
+                                id = conn.Id.ToString(),
+                                source = conn.SourceDeviceId.ToString(),
+                                target = conn.DestinationDeviceId.ToString(),
+                                label = conn.Speed ?? "",
+                                sourcePort = conn.SourceInterface ?? "",
+                                targetPort = conn.DestinationInterface ?? "",
+                                color = ColorToHex(ConnectionIcons.GetColor(conn.Type))
+                            }
+                        });
+                        ProcessHierarchy(conn.DestinationDeviceId, depth + 1, GetPortNumber(conn.SourceInterface));
+                    }
+                }
+
+                foreach (var root in rootDevices)
+                {
+                    ProcessHierarchy(root.Id, 0, 0);
+                }
+
+                foreach (var device in _allDevices)
+                {
+                    if (!processedDeviceIds.Contains(device.Id.ToString()))
+                    {
+                        ProcessHierarchy(device.Id, 0, 999);
+                    }
+                }
+
+                await JS.InvokeVoidAsync("topology.init", "topology-container", elements, _objRef);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao gerar topologia: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenCreateDeviceDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateDeviceDialog>("Novo Dispositivo", options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadTopology();
+    }
+
+    private async Task OpenCreateConnectionDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateConnectionDialog>("Nova Conexão", options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadTopology();
+    }
+
+    private async Task OnEditSelected()
+    {
+        if (_selectedElement == null || !Guid.TryParse(_selectedElement.Id, out var id)) return;
+
+        if (_selectedElementType == "node")
+        {
+            var deviceResult = await DeviceService.GetDevicesAsync(_requesterId);
+            var device = deviceResult.Data?.FirstOrDefault(d => d.Id == id);
+            if (device == null) return;
+
+            var parameters = new DialogParameters
+            {
+                { "DeviceId", device.Id },
+                { "CurrentName", device.Name },
+                { "CurrentIp", device.IpAddress },
+                { "CurrentType", device.Type }
+            };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+            var dialog = await DialogService.ShowAsync<UpdateDeviceDialog>("Editar Dispositivo", parameters, options);
+            var result = await dialog.Result;
+            if (!result!.Canceled) await LoadTopology();
+        }
+        else if (_selectedElementType == "edge")
+        {
+            var connectionsResult = await DeviceService.GetConnectionsAsync(_requesterId);
+            var connection = connectionsResult.Data?.FirstOrDefault(c => c.Id == id);
+            if (connection == null) return;
+
+            var summary = new ConnectionSummaryDto(
+                connection.Id,
+                connection.SourceDeviceId,
+                connection.SourceDeviceName,
+                connection.SourceDeviceType,
+                connection.SourceInterface,
+                connection.DestinationDeviceId,
+                connection.DestinationDeviceName,
+                connection.DestinationDeviceType,
+                connection.DestinationInterface,
+                connection.Type,
+                connection.Speed,
+                connection.OrganizationId
+            );
+
+            var parameters = new DialogParameters { { "Connection", summary } };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+            var dialog = await DialogService.ShowAsync<UpdateConnectionDialog>("Editar Conexão", parameters, options);
+            var result = await dialog.Result;
+            if (!result!.Canceled) await LoadTopology();
+        }
+    }
+
+    private async Task OnDeleteSelected()
+    {
+        if (_selectedElement == null || !Guid.TryParse(_selectedElement.Id, out var id)) return;
+
+        var confirm = await DialogService.ShowMessageBox(
+            "Confirmar Exclusão",
+            $"Tem certeza que deseja excluir este item?",
+            yesText: "Excluir", cancelText: "Cancelar");
+
+        if (confirm == true)
+        {
+            if (_selectedElementType == "node")
+            {
+                var result = await DeviceService.DeleteDeviceAsync(new DeleteDeviceDto(_requesterId, id));
+                if (result.Success)
+                {
+                    Snackbar.Add("Dispositivo excluído com sucesso", Severity.Success);
+                    _selectedElement = null;
+                    await LoadTopology();
+                }
+                else Snackbar.Add(result.Message, Severity.Error);
+            }
+            else
+            {
+                var result = await DeviceService.DeleteConnectionAsync(_requesterId, id);
+                if (result.Success)
+                {
+                    Snackbar.Add("Conexão excluída com sucesso", Severity.Success);
+                    _selectedElement = null;
+                    await LoadTopology();
+                }
+                else Snackbar.Add(result.Message, Severity.Error);
+            }
+        }
+    }
+
+    private string ColorToHex(Color color) => color switch
+    {
+        Color.Primary => "#7E6FFF", // Light indigo
+        Color.Secondary => "#FF70A1", // Vibrant pink
+        Color.Info => "#4FC3F7", // Bright light blue
+        Color.Success => "#81C784", // Soft green
+        Color.Warning => "#FFB74D", // Light orange
+        Color.Error => "#EF5350", // Soft coral/red
+        Color.Tertiary => "#26A69A", // Bright teal
+        _ => "#B0BEC5" // Light grey
+    };
+
+    private int GetPortNumber(string? portName)
+    {
+        if (string.IsNullOrEmpty(portName)) return int.MaxValue;
+        var match = System.Text.RegularExpressions.Regex.Match(portName, @"\d+");
+        return match.Success ? int.Parse(match.Value) : int.MaxValue;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        OrganizationState.OnChange -= HandleOrganizationChange;
+        _objRef?.Dispose();
+        try 
+        {
+            await JS.InvokeVoidAsync("topology.destroy");
+        }
+        catch { }
+    }
+}

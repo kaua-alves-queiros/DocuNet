@@ -59,8 +59,11 @@
                 <Authorized>
                     @if (OrganizationState.CurrentOrganization != null)
                     {
-                        <MudNavLink Match="NavLinkMatch.All" Href="/devices" Icon="@Icons.Material.Filled.Devices">Dispositivos</MudNavLink>
-                        <MudNavLink Match="NavLinkMatch.All" Href="/devices/connections" Icon="@Icons.Material.Filled.Link">Conexões</MudNavLink>
+                        <MudNavGroup Title="Rede" Icon="@Icons.Material.Filled.Router" Expanded="true">
+                            <MudNavLink Match="NavLinkMatch.All" Href="/devices" Icon="@Icons.Material.Filled.Devices">Dispositivos</MudNavLink>
+                            <MudNavLink Match="NavLinkMatch.All" Href="/devices/connections" Icon="@Icons.Material.Filled.Link">Conexões</MudNavLink>
+                            <MudNavLink Match="NavLinkMatch.All" Href="/devices/topology" Icon="@Icons.Material.Filled.Hub">Topologia</MudNavLink>
+                        </MudNavGroup>
                     }
                 </Authorized>
             </AuthorizeView>

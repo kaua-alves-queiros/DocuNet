@@ -36,63 +36,102 @@ else
             </MudButton>
         </MudStack>
 
-        <MudTable Items="@_connections" Loading="@_loading" Hover="true" Bordered="false" Striped="true" Elevation="0">
+        <MudTable Items="@_connections" 
+                  Loading="@_loading" 
+                  Hover="true" 
+                  Bordered="false" 
+                  Striped="true" 
+                  Elevation="0"
+                  GroupBy="@_groupDefinition">
+            <ColGroup>
+                <col style="width: 40px;" />
+                <col />
+                <col style="width: 40px;" />
+                <col />
+                <col style="width: 150px;" />
+                <col style="width: 100px;" />
+                <col style="width: 120px;" />
+            </ColGroup>
             <HeaderContent>
-                <MudTh>Origem</MudTh>
+                <MudTh>Origem / Porta</MudTh>
                 <MudTh Style="text-align: center"><MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Size="Size.Small" /></MudTh>
-                <MudTh>Destino</MudTh>
-                <MudTh>Tipo</MudTh>
+                <MudTh>Destino / Porta</MudTh>
+                <MudTh>Tipo de Cabo</MudTh>
                 <MudTh>Velocidade</MudTh>
                 <MudTh Style="text-align: right">Ações</MudTh>
             </HeaderContent>
+            <GroupHeaderTemplate>
+                @{
+                    var firstItem = context.Items.First();
+                    var themeColor = DeviceIcons.GetColor(firstItem.SourceDeviceType).ToString().ToLower();
+                }
+                <MudTh Class="@($"mud-theme-{themeColor} pa-1")" colspan="7">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="ml-2">
+                        <MudIcon Icon="@DeviceIcons.GetMudIcon(firstItem.SourceDeviceType)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Style="font-weight: 700">@context.Key</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.8">(@context.Items.Count())</MudText>
+                    </MudStack>
+                </MudTh>
+            </GroupHeaderTemplate>
             <RowTemplate>
                 <MudTd DataLabel="Origem">
-                    <MudStack Spacing="0">
-                        <MudText Typo="Typo.body2" Style="font-weight: 600">@context.SourceDeviceName</MudText>
-                        @if (!string.IsNullOrEmpty(context.SourceInterface))
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Porta: @context.SourceInterface</MudText>
-                        }
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@DeviceIcons.GetMudIcon(context.SourceDeviceType)" 
+                                 Color="@DeviceIcons.GetColor(context.SourceDeviceType)" 
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Style="font-weight: 600">
+                            @context.SourceDeviceName
+                            @if (!string.IsNullOrEmpty(context.SourceInterface))
+                            {
+                                <span class="mud-text-secondary ml-1" style="font-size: 0.75rem; font-weight: 400">(@context.SourceInterface)</span>
+                            }
+                        </MudText>
                     </MudStack>
                 </MudTd>
                 <MudTd Style="text-align: center">
                     <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" Color="Color.Default" />
                 </MudTd>
                 <MudTd DataLabel="Destino">
-                    <MudStack Spacing="0">
-                        <MudText Typo="Typo.body2" Style="font-weight: 600">@context.DestinationDeviceName</MudText>
-                        @if (!string.IsNullOrEmpty(context.DestinationInterface))
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Porta: @context.DestinationInterface</MudText>
-                        }
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@DeviceIcons.GetMudIcon(context.DestinationDeviceType)" 
+                                 Color="@DeviceIcons.GetColor(context.DestinationDeviceType)" 
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Style="font-weight: 600">
+                            @context.DestinationDeviceName
+                            @if (!string.IsNullOrEmpty(context.DestinationInterface))
+                            {
+                                <span class="mud-text-secondary ml-1" style="font-size: 0.75rem; font-weight: 400">(@context.DestinationInterface)</span>
+                            }
+                        </MudText>
                     </MudStack>
                 </MudTd>
                 <MudTd DataLabel="Tipo">
                     <MudChip T="string" 
                              Size="Size.Small" 
-                             Variant="Variant.Filled" 
+                             Variant="Variant.Text" 
                              Color="@ConnectionIcons.GetColor(context.Type)" 
-                             Icon="@ConnectionIcons.GetIcon(context.Type)">
+                             Icon="@ConnectionIcons.GetIcon(context.Type)"
+                             Style="margin: 0; font-weight: 500;">
                         @GetDisplayName(context.Type)
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Velocidade">
                     <MudText Typo="Typo.body2">@(context.Speed ?? "-")</MudText>
                 </MudTd>
-                <MudTd DataLabel="Ações" Style="text-align: right">
+                <MudTd DataLabel="Ações" Style="text-align: right; white-space: nowrap;">
                     <MudTooltip Text="Editar">
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => OpenUpdateDialog(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenUpdateDialog(context))" />
                     </MudTooltip>
                     <MudTooltip Text="Excluir">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteConnection(context.Id))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteConnection(context.Id))" />
                     </MudTooltip>
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
-                <MudText>Nenhuma conexão encontrada para esta organização.</MudText>
+                <MudText Class="pa-4">Nenhuma conexão encontrada para esta organização.</MudText>
             </NoRecordsContent>
             <LoadingContent>
-                <MudText>Carregando conexões...</MudText>
+                <MudText Class="pa-4">Carregando conexões...</MudText>
             </LoadingContent>
         </MudTable>
     </MudPaper>
@@ -102,6 +141,15 @@ else
     private List<ConnectionSummaryDto> _connections = new();
     private bool _loading = true;
     private Guid _requesterId = Guid.Empty;
+
+    private TableGroupDefinition<ConnectionSummaryDto> _groupDefinition = new()
+    {
+        GroupName = "Dispositivo de Origem",
+        Indentation = false,
+        Expandable = true,
+        IsInitiallyExpanded = true,
+        Selector = (c) => c.SourceDeviceName
+    };
 
     protected override async Task OnInitializedAsync()
     {
