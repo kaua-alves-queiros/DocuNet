@@ -44,6 +44,7 @@ namespace DocuNet.Web
 
             builder.Services.AddScoped<UserService>();
             builder.Services.AddScoped<OrganizationService>();
+            builder.Services.AddScoped<DeviceService>();
             var app = builder.Build();
 
             if (!app.Environment.IsDevelopment())
