@@ -20,7 +20,7 @@
             <MudNavLink Typo="Typo.h6">Zapbridge</MudNavLink>
         </MudDrawerHeader>
         <MudNavMenu>
-            <MudNavLink Match="NavLinkMatch.All" Href="/">Inicio</MudNavLink>
+            <MudNavLink Match="NavLinkMatch.All" Href="/" Icon="@Icons.Material.Filled.Home">Início</MudNavLink>
 
             <AuthorizeView>
                 <Authorized>
@@ -29,8 +29,10 @@
             </AuthorizeView>
             <AuthorizeView Roles="@SystemRoles.SystemAdministrator">
                 <Authorized>
-                    <MudNavLink Match="NavLinkMatch.All" Href="/users">Usuarios</MudNavLink>
-                    <MudNavLink Match="NavLinkMatch.All" Href="/organizations">Organizações</MudNavLink>
+                    <MudNavGroup Title="Sistema" Icon="@Icons.Material.Filled.Settings" Expanded="false">
+                        <MudNavLink Match="NavLinkMatch.All" Href="/users" Icon="@Icons.Material.Filled.People">Usuários</MudNavLink>
+                        <MudNavLink Match="NavLinkMatch.All" Href="/organizations" Icon="@Icons.Material.Filled.Business">Organizações</MudNavLink>
+                    </MudNavGroup>
                 </Authorized>
             </AuthorizeView>
             <MudSwitch @bind-Value="_isDarkMode" UncheckedColor="@Color.Dark" Color="@Color.Primary">Modo Escuro</MudSwitch>
