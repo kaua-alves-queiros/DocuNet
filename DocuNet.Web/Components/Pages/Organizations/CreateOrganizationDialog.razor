@@ -1,0 +1,56 @@
+@using DocuNet.Web.Dtos.Organization
+@using DocuNet.Web.Services
+@inject OrganizationService OrganizationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Nova Organização</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" Label="Nome da Organização" @bind-Value="_name" Required="true" RequiredError="Nome é obrigatório." />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@_processing">
+            @if (_processing) { <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/> }
+            else { <MudText>Salvar</MudText> }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid RequesterId { get; set; }
+
+    private string _name = "";
+    private bool _processing;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("O nome da organização é obrigatório.", Severity.Warning);
+            return;
+        }
+
+        _processing = true;
+        
+        var dto = new CreateOrganizationDto(RequesterId, _name);
+        var result = await OrganizationService.CreateOrganizationAsync(dto);
+        
+        _processing = false;
+
+        if (result.Success)
+        {
+            Snackbar.Add(result.Message, Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+    }
+}
