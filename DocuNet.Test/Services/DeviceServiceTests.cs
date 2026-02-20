@@ -67,6 +67,31 @@ namespace DocuNet.Test.Services
             var deviceInDb = await _context.Devices.FirstOrDefaultAsync(d => d.Name == "Device 1");
             Assert.NotNull(deviceInDb);
             Assert.Equal(EDeviceTypes.Router, deviceInDb.Type);
+            Assert.Equal("192.168.1.1", deviceInDb.IpAddress);
+        }
+
+        [Fact]
+        public async Task CreateDeviceAsync_ShouldReturnSuccess_WhenIpAddressIsNull()
+        {
+            var adminId = Guid.NewGuid();
+            var adminUser = new User { Id = adminId, Email = "admin@test.com" };
+            var org = new Organization { Id = Guid.NewGuid(), Name = "Org 1", IsActive = true };
+            _context.Organizations.Add(org);
+            await _context.SaveChangesAsync();
+
+            var dto = new CreateDeviceDto(adminId, "Device No IP", null, EDeviceTypes.Router, org.Id);
+
+            _userManagerMock.Setup(x => x.FindByIdAsync(adminId.ToString())).ReturnsAsync(adminUser);
+            _userManagerMock.Setup(x => x.IsInRoleAsync(adminUser, SystemRoles.SystemAdministrator)).ReturnsAsync(true);
+            _userManagerMock.Setup(x => x.IsLockedOutAsync(adminUser)).ReturnsAsync(false);
+
+            var result = await _deviceService.CreateDeviceAsync(dto);
+
+            Assert.True(result.Success);
+            
+            var deviceInDb = await _context.Devices.FirstOrDefaultAsync(d => d.Name == "Device No IP");
+            Assert.NotNull(deviceInDb);
+            Assert.Null(deviceInDb.IpAddress);
         }
 
         [Fact]

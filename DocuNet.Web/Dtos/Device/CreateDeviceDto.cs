@@ -19,9 +19,8 @@ public record CreateDeviceDto(
     [StringLength(100, MinimumLength = 3, ErrorMessage = "O nome deve ter entre 3 e 100 caracteres.")]
     string Name,
     
-    [Required(ErrorMessage = "O endereço IP é obrigatório.")]
     [StringLength(50, ErrorMessage = "O endereço IP não pode exceder 50 caracteres.")]
-    string IpAddress,
+    string? IpAddress,
     
     [Required(ErrorMessage = "O tipo do dispositivo é obrigatório.")]
     EDeviceTypes Type,

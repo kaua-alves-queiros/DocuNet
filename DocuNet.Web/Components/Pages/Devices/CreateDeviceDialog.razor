@@ -16,7 +16,7 @@
     <DialogContent>
         <MudForm @ref="form" @bind-IsValid="@success">
             <MudTextField @bind-Value="name" Label="Nome do Dispositivo" Required="true" RequiredError="Nome é obrigatório." MaxLength="100"/>
-            <MudTextField @bind-Value="ipAddress" Label="Endereço IP" Required="true" RequiredError="IP é obrigatório." MaxLength="50"/>
+            <MudTextField @bind-Value="ipAddress" Label="Endereço IP" MaxLength="50"/>
             <MudSelect T="EDeviceTypes" @bind-Value="type" Label="Tipo" Required="true" AnchorOrigin="Origin.BottomCenter">
                 @foreach (EDeviceTypes t in Enum.GetValues(typeof(EDeviceTypes)))
                 {
@@ -89,7 +89,8 @@
             {
                 if (OrganizationState.CurrentOrganization != null && userId != Guid.Empty)
                 {
-                    var model = new CreateDeviceDto(userId, name, ipAddress, type, OrganizationState.CurrentOrganization.Id);
+                    var finalIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress;
+                    var model = new CreateDeviceDto(userId, name, finalIp, type, OrganizationState.CurrentOrganization.Id);
                     var result = await DeviceService.CreateDeviceAsync(model);
                     if (result.Success)
                     {
