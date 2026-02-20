@@ -1,0 +1,111 @@
+@using DocuNet.Web.Dtos.Device
+@using DocuNet.Web.Enumerators
+@using DocuNet.Web.Services
+@using DocuNet.Web.States
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject DeviceService DeviceService
+@inject OrganizationState OrganizationState
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField @bind-Value="name" Label="Nome do Dispositivo" Required="true" RequiredError="Nome é obrigatório." MaxLength="100"/>
+            <MudTextField @bind-Value="ipAddress" Label="Endereço IP" Required="true" RequiredError="IP é obrigatório." MaxLength="50"/>
+            <MudSelect T="EDeviceTypes" @bind-Value="type" Label="Tipo" Required="true" AnchorOrigin="Origin.BottomCenter">
+                @foreach (EDeviceTypes t in Enum.GetValues(typeof(EDeviceTypes)))
+                {
+                    <MudSelectItem Value="@t">@t.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!success || _processing)">
+            @if (_processing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Salvando...</MudText>
+            }
+            else
+            {
+                <MudText>Salvar</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string name = string.Empty;
+    private string ipAddress = string.Empty;
+    private EDeviceTypes type = EDeviceTypes.Router;
+
+    private MudForm form = default!;
+    private bool success;
+    private bool _processing;
+
+    private Guid userId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        if (Guid.TryParse(userIdStr, out var uId) && OrganizationState.CurrentOrganization != null)
+        {
+             userId = uId;
+        }
+        else
+        {
+             // Fallback or error if context invalid, maybe close dialog
+             Snackbar.Add("Erro ao identificar usuário ou organização selecionada.", Severity.Error);
+             MudDialog.Cancel();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await form.Validate();
+        if (form.IsValid)
+        {
+            _processing = true;
+            try
+            {
+                if (OrganizationState.CurrentOrganization != null && userId != Guid.Empty)
+                {
+                    var model = new CreateDeviceDto(userId, name, ipAddress, type, OrganizationState.CurrentOrganization.Id);
+                    var result = await DeviceService.CreateDeviceAsync(model);
+                    if (result.Success)
+                    {
+                        Snackbar.Add(result.Message, Severity.Success);
+                        MudDialog.Close(DialogResult.Ok(result.Data));
+                    }
+                    else
+                    {
+                        Snackbar.Add(result.Message, Severity.Error);
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Erro ao processar solicitação: contexto inválido.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erro inesperado: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _processing = false;
+            }
+        }
+    }
+}
