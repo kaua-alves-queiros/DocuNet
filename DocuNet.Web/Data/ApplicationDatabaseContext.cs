@@ -13,5 +13,6 @@ namespace DocuNet.Web.Data
         }
 
         public DbSet<Organization> Organizations { get; set; } = null!;
+        public DbSet<Device> Devices { get; set; } = null!;
     }
 }
