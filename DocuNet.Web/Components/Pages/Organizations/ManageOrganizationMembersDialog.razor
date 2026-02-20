@@ -1,0 +1,133 @@
+@using DocuNet.Web.Dtos.Organization
+@using DocuNet.Web.Dtos.User
+@using DocuNet.Web.Services
+@inject OrganizationService OrganizationService
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Gerenciar Membros - @OrganizationName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+             <MudAutocomplete T="UserSummaryDto" Label="Adicionar Usuário" @bind-Value="_selectedUser" SearchFunc="@SearchUsers"
+                              ToStringFunc="@(u => u == null ? null : $"{u.Email} ({(u.Roles.FirstOrDefault() ?? "N/A")})")"
+                              AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary" />
+             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddUser" Disabled="@(_selectedUser == null || _processing)">Adicionar</MudButton>
+        </MudStack>
+
+        <MudTable Items="@_members" Hover="true" Dense="true" Loading="@_loading" Elevation="0">
+             <HeaderContent>
+                 <MudTh>Email</MudTh>
+                 <MudTh>Role</MudTh>
+                 <MudTh>Ações</MudTh>
+             </HeaderContent>
+             <RowTemplate>
+                 <MudTd DataLabel="Email">@context.Email</MudTd>
+                 <MudTd DataLabel="Role">@(context.Roles.FirstOrDefault() ?? "User")</MudTd>
+                 <MudTd DataLabel="Ações">
+                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveUser(context))" Disabled="@_processing" />
+                 </MudTd>
+             </RowTemplate>
+             <NoRecordsContent>
+                 <MudText>Nenhum membro nesta organização.</MudText>
+             </NoRecordsContent>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid RequesterId { get; set; }
+    [Parameter] public Guid OrganizationId { get; set; }
+    [Parameter] public string OrganizationName { get; set; } = "";
+
+    private List<UserSummaryDto> _members = new();
+    private List<UserSummaryDto> _allUsers = new();
+    private UserSummaryDto? _selectedUser;
+    private bool _loading = true;
+    private bool _processing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var membersResult = await OrganizationService.GetOrganizationMembersAsync(RequesterId, OrganizationId);
+        if (membersResult.Success)
+        {
+            _members = membersResult.Data ?? new();
+        }
+
+        var usersResult = await UserService.GetUsersSummaryAsync(RequesterId);
+        if (usersResult.Success)
+        {
+            _allUsers = usersResult.Data ?? new();
+        }
+        _loading = false;
+    }
+
+    private async Task<IEnumerable<UserSummaryDto>> SearchUsers(string value, CancellationToken cancellationToken)
+    {
+        // Filter users not already in _members
+        var availableUsers = _allUsers.Where(u => !_members.Any(m => m.Id == u.Id));
+
+        if (string.IsNullOrEmpty(value))
+            return availableUsers;
+        
+        return availableUsers.Where(x => x.Email.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    private async Task AddUser()
+    {
+        if (_selectedUser == null) return;
+
+        _processing = true;
+        var dto = new ManageUserInOrganizationDto(RequesterId, OrganizationId, _selectedUser.Id);
+        var result = await OrganizationService.AddUserToOrganizationAsync(dto);
+
+        if (result.Success)
+        {
+            Snackbar.Add("Usuário adicionado com sucesso.", Severity.Success);
+            _selectedUser = null;
+            await LoadData(); // Reload members
+        }
+        else
+        {
+            Snackbar.Add(result.Message, Severity.Error);
+        }
+        _processing = false;
+    }
+
+    private async Task RemoveUser(UserSummaryDto user)
+    {
+        var confirm = await DialogService.ShowMessageBox("Confirmar", $"Remover {user.Email} da organização?", yesText: "Sim", noText: "Não");
+        if (confirm == true)
+        {
+             _processing = true;
+            var dto = new ManageUserInOrganizationDto(RequesterId, OrganizationId, user.Id);
+            var result = await OrganizationService.RemoveUserFromOrganizationAsync(dto);
+
+            if (result.Success)
+            {
+                Snackbar.Add("Usuário removido com sucesso.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Message, Severity.Error);
+            }
+            _processing = false;
+        }
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}
