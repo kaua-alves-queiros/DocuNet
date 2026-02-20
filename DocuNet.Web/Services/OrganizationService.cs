@@ -270,5 +270,27 @@ namespace DocuNet.Web.Services
                 return new ServiceResultDto<bool>(false, false, "Erro interno ao processar a operação.");
             }
         }
+
+        /// <summary>
+        /// Obtém uma lista resumida de todas as organizações.
+        /// </summary>
+        public async Task<ServiceResultDto<List<OrganizationSummaryDto>>> GetAllOrganizationsAsync(Guid requesterId)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<List<OrganizationSummaryDto>>(false, [], "Acesso negado.");
+            }
+
+            var organizations = await context.Organizations.Include(o => o.Users).ToListAsync();
+            var summaries = organizations.Select(o => new OrganizationSummaryDto(
+                o.Id,
+                o.Name,
+                o.IsActive,
+                o.Users.Count
+            )).ToList();
+
+            return new ServiceResultDto<List<OrganizationSummaryDto>>(true, summaries, "Organizações carregadas com sucesso.");
+        }
     }
 }
