@@ -34,7 +34,7 @@
 
 ## 🛠️ Stack Tecnológica
 
-- **Backend/Frontend:** ASP.NET Core 9 & Blazor Server (Interactive Mode)
+- **Backend/Frontend:** ASP.NET Core 10 & Blazor Server (Interactive Mode)
 - **UI Toolkit:** [MudBlazor](https://mudblazor.com/) (Componentes Material Design para Blazor)
 - **ORM:** Entity Framework Core
 - **Database:** SQLite (Leve e eficiente para documentação local/distribuída)
