@@ -1,7 +1,263 @@
 ﻿@page "/"
+@using DocuNet.Web.States
+@inject OrganizationState OrganizationState
 
-<PageTitle>Home</PageTitle>
+<PageTitle>DocuNet - Documentação de Rede Inteligente</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="home-container">
+    <!-- Hero Section -->
+    <div class="hero-section pa-8 d-flex flex-column align-center justify-center text-center">
+        <div class="hero-glow"></div>
+        <MudText Typo="Typo.h1" Class="hero-title mb-2">DocuNet</MudText>
+        <MudText Typo="Typo.h4" Class="hero-subtitle mb-8" Style="opacity: 0.8; font-weight: 300;">
+            A próxima geração em documentação e topologia de rede.
+        </MudText>
+        
+        <MudStack Row Spacing="4" Class="hero-actions">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" 
+                       StartIcon="@Icons.Material.Filled.Hub" Href="/devices/topology"
+                       Style="border-radius: 12px; padding: 12px 32px; font-weight: 700;">
+                Explorar Topologia
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Large"
+                       StartIcon="@Icons.Custom.Brands.GitHub" 
+                       Href="https://github.com/kaua-alves-queiros/DocuNet" Target="_blank"
+                       Style="border-radius: 12px; padding: 12px 32px; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05);">
+                GitHub
+            </MudButton>
+        </MudStack>
+    </div>
 
-Welcome to your new app.
+    <!-- Showcase Section -->
+    <div class="showcase-section pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8" Style="font-weight: 800; color: #7E6FFF">Interface Moderna e Intuitiva</MudText>
+        <MudGrid Spacing="4">
+            <MudItem xs="12" md="8">
+                <div class="showcase-card large">
+                    <img src="screenshots/topology.jpg" alt="Mapa de Topologia" />
+                    <div class="showcase-overlay">
+                        <MudText Typo="Typo.h6">Topologia em Tempo Real</MudText>
+                        <MudText Typo="Typo.body2">Controle total sobre sua infraestrutura visual.</MudText>
+                    </div>
+                </div>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudStack Spacing="4" Class="h-100">
+                    <div class="showcase-card small flex-grow-1">
+                        <img src="screenshots/devices-list.jpg" alt="Lista de Dispositivos" />
+                        <div class="showcase-overlay">
+                            <MudText Typo="Typo.subtitle1">Gestão de Ativos</MudText>
+                        </div>
+                    </div>
+                    <div class="showcase-card small flex-grow-1">
+                        <img src="screenshots/connections-list.jpg" alt="Lista de Conexões" />
+                        <div class="showcase-overlay">
+                            <MudText Typo="Typo.subtitle1">Links Detalhados</MudText>
+                        </div>
+                    </div>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </div>
+
+    <!-- Features Grid -->
+    <div class="features-section pa-8">
+        <MudGrid Spacing="6">
+            <MudItem xs="12" sm="6" md="3">
+                <div class="feature-card">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Class="mt-4">Topologia Dinâmica</MudText>
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7">Visualize sua infraestrutura em tempo real com mapas interativos e inteligentes.</MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <div class="feature-card">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Info" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Class="mt-4">Isolamento Multi-Org</MudText>
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7">Gerencie múltiplas organizações com total separação de dados e segurança.</MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <div class="feature-card">
+                    <MudIcon Icon="@Icons.Material.Filled.Construction" Color="Color.Secondary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Class="mt-4">Editor In-Place</MudText>
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7">Adicione, edite e remova dispositivos e conexões diretamente pelo mapa visual.</MudText>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <div class="feature-card">
+                    <MudIcon Icon="@Icons.Material.Filled.Code" Color="Color.Success" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Class="mt-4">Open Source</MudText>
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7">Sistema totalmente aberto e extensível. Contribua para o futuro da rede.</MudText>
+                </div>
+            </MudItem>
+        </MudGrid>
+    </div>
+
+    <!-- Repository Section -->
+    <div class="repo-section pa-12 mt-8">
+        <MudPaper Elevation="0" Class="pa-8 repo-banner d-flex align-center justify-space-between flex-wrap">
+            <div class="repo-info">
+                <MudText Typo="Typo.h5" Style="font-weight: 800;">Faça parte do projeto</MudText>
+                <MudText Typo="Typo.body1" Style="opacity: 0.7;">DocuNet é um projeto de código aberto focado na comunidade.</MudText>
+            </div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                       StartIcon="@Icons.Custom.Brands.GitHub"
+                       Href="https://github.com/kaua-alves-queiros/DocuNet" Target="_blank"
+                       Class="mt-4 mt-sm-0" 
+                       Style="background: #24292e; color: white;">
+                Ver Repositório no GitHub
+            </MudButton>
+        </MudPaper>
+    </div>
+
+    <!-- Creator Section -->
+    <div class="creator-section pa-12 pt-0 d-flex flex-column align-center">
+        <MudDivider Style="width: 200px; opacity: 0.1;" Class="mb-8" />
+        <div class="creator-card pa-6 d-flex align-center">
+            <MudAvatar Size="Size.Large" Class="mr-4" Style="width: 60px; height: 60px; border: 2px solid var(--mud-palette-primary);">
+                <MudImage Src="kaua.jpg" Alt="Kauã Alves" />
+            </MudAvatar>
+            <div class="creator-info">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Criado por Kauã Alves</MudText>
+                <MudStack Row Spacing="2" Class="mt-1">
+                    <MudIconButton Icon="@Icons.Custom.Brands.LinkedIn" Size="Size.Small" Color="Color.Primary"
+                                   Href="https://www.linkedin.com/in/kaua-a-queiros-c-silva-09956a21b/" Target="_blank" />
+                    <MudIconButton Icon="@Icons.Custom.Brands.GitHub" Size="Size.Small" Color="Color.Default"
+                                   Href="https://github.com/kaua-alves-queiros" Target="_blank" />
+                </MudStack>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .home-container {
+        min-height: 80vh;
+        color: white;
+    }
+
+    .hero-section {
+        position: relative;
+        padding-top: 100px;
+        padding-bottom: 120px;
+        overflow: hidden;
+    }
+
+    .hero-glow {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 150%;
+        height: 150%;
+        background: radial-gradient(circle, rgba(126, 111, 255, 0.15) 0%, rgba(126, 111, 255, 0) 70%);
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .hero-title {
+        font-weight: 900;
+        letter-spacing: -2px;
+        background: linear-gradient(135deg, #fff 0%, #7E6FFF 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        z-index: 1;
+    }
+
+    .hero-subtitle, .hero-actions {
+        z-index: 1;
+    }
+
+    .feature-card {
+        padding: 32px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 24px;
+        height: 100%;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+    }
+
+    .feature-card:hover {
+        transform: translateY(-8px);
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(126, 111, 255, 0.3);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+
+    .repo-banner {
+        background: linear-gradient(90deg, rgba(126, 111, 255, 0.1) 0%, rgba(79, 195, 247, 0.1) 100%) !important;
+        border: 1px solid rgba(126, 111, 255, 0.2);
+        border-radius: 24px;
+        backdrop-filter: blur(10px);
+    }
+
+    .showcase-card {
+        position: relative;
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(0,0,0,0.2);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .showcase-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.8;
+        transition: transform 0.6s ease;
+    }
+
+    .showcase-card:hover {
+        border-color: #7E6FFF;
+        box-shadow: 0 0 30px rgba(126, 111, 255, 0.2);
+    }
+
+    .showcase-card:hover img {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+
+    .showcase-card.large {
+        height: 420px;
+    }
+
+    .showcase-card.small {
+        height: 200px;
+    }
+
+    .showcase-overlay {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 24px;
+        background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
+        pointer-events: none;
+    }
+
+    .creator-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+    }
+
+    .creator-card:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(126, 111, 255, 0.2);
+    }
+
+    /* Animação suave de entrada */
+    .hero-title, .hero-subtitle, .feature-card {
+        animation: fadeIn 0.8s ease forwards;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
