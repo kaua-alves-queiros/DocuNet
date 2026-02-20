@@ -4,6 +4,7 @@
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = null!;
+        public ICollection<Device> Devices { get; set; } = new List<Device>();
         public ICollection<User> Users { get; set; } = new List<User>();
         public bool IsActive { get; set; } = true;
     }
