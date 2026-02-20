@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Microsoft.AspNetCore.Mvc;
 
 namespace DocuNet.Web
 {
@@ -64,6 +65,38 @@ namespace DocuNet.Web
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
+
+            app.MapPost("/account/login", async (
+                [FromForm] string email, 
+                [FromForm] string password, 
+                [FromForm] string? returnUrl,
+                SignInManager<User> signInManager) =>
+            {
+                var result = await signInManager.PasswordSignInAsync(email, password, false, lockoutOnFailure: false);
+                if (result.Succeeded)
+                {
+                    // Garante que o redirecionamento seja para uma URL local e não vazia
+                    if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith("/"))
+                    {
+                        return Results.Redirect("/");
+                    }
+                    return Results.Redirect(returnUrl);
+                }
+                
+                var errorUrl = "/account/login?error=InvalidLogin";
+                if (!string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith("/"))
+                {
+                    errorUrl += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+                }
+                return Results.Redirect(errorUrl);
+            }).DisableAntiforgery();
+
+            app.MapGet("/account/logout", async (
+                SignInManager<User> signInManager) =>
+            {
+                await signInManager.SignOutAsync();
+                return Results.Redirect("/");
+            }).ExcludeFromDescription();
 
             await app.InitializeDatabaseAsync();
 

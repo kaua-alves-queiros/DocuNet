@@ -1,79 +1,87 @@
 ﻿@page "/account/login"
+@layout DocuNet.Web.Components.Layout.AuthLayout
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Identity
 @using DocuNet.Web.Models
-@inject SignInManager<User> SignInManager
-@inject NavigationManager NavigationManager
-@inject UserManager<User> UserManager
-@inject ILogger<Login> Logger
 
 <PageTitle>Login</PageTitle>
 
-<MudCard Width="400px" Class="pa-4 mx-auto mt-10">
-    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="LoginForm">
-        <DataAnnotationsValidator />
+<MudCard Width="400px" Class="pa-8 mx-auto mt-16" Style="border-radius: 24px; background: rgba(255,255,255,0.02); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05);">
+    <div class="d-flex flex-column align-center mb-8">
+        <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+        <MudText Typo="Typo.h5" Style="font-weight: 800;">Entrar no DocuNet</MudText>
+    </div>
 
-        <MudText Typo="Typo.h5">Entrar no Zapbridge</MudText>
+    <form action="/account/login" method="post">
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        
+        <div class="mb-4">
+            <label class="mud-typography mud-typography-caption mud-primary-text mb-1 d-block">E-mail</label>
+            <input type="email" name="email" required class="custom-input" placeholder="exemplo@email.com" />
+        </div>
 
-        <MudTextField Label="E-mail"
-                      @bind-Value="Input.Email"
-                      For="@(() => Input.Email)"
-                      Variant="Variant.Outlined"
-                      ShrinkLabel="true"
-                      Name="Input.Email" />
+        <div class="mb-6">
+            <label class="mud-typography mud-typography-caption mud-primary-text mb-1 d-block">Senha</label>
+            <input type="password" name="password" required class="custom-input" placeholder="••••••••" />
+        </div>
 
-        <MudTextField Label="Senha"
-                      @bind-Value="Input.Password"
-                      For="@(() => Input.Password)"
-                      InputType="InputType.Password"
-                      Variant="Variant.Outlined"
-                      ShrinkLabel="true"
-                      Name="Input.Password" />
-
-        @if (errorMessage != null)
+        @if (Error == "InvalidLogin")
         {
-            <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4" Style="border-radius: 12px;">Login inválido.</MudAlert>
         }
 
-        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">
+        <button type="submit" class="custom-submit-btn">
             Entrar
-        </MudButton>
-    </EditForm>
+        </button>
+    </form>
 </MudCard>
+
+<style>
+    .custom-input {
+        width: 100%;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        color: white;
+        font-family: inherit;
+        outline: none;
+        transition: all 0.2s ease;
+    }
+
+    .custom-input:focus {
+        border-color: #7E6FFF;
+        background: rgba(126, 111, 255, 0.05);
+        box-shadow: 0 0 0 4px rgba(126, 111, 255, 0.1);
+    }
+
+    .custom-submit-btn {
+        width: 100%;
+        padding: 14px;
+        background: #7E6FFF;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .custom-submit-btn:hover {
+        background: #6e5eff;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(126, 111, 255, 0.3);
+    }
+
+    .custom-submit-btn:active {
+        transform: translateY(0);
+    }
+</style>
 
 @code {
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
-    [SupplyParameterFromForm]
-    public LoginInput Input { get; set; } = new();
 
-    private string? errorMessage;
-
-    public async Task LoginUser()
-    {
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, false, false);
-
-        if (result.Succeeded)
-        {
-            var user = await UserManager.FindByEmailAsync(Input.Email);
-            if (user is not null)
-            {
-                await SignInManager.RefreshSignInAsync(user);
-                var roles = await UserManager.GetRolesAsync(user);
-                Logger.LogInformation("User {Email} logged in. Roles: {@Roles}", Input.Email, roles);
-            }
-
-            NavigationManager.NavigateTo(ReturnUrl ?? "/");
-        }
-        else
-        {
-            errorMessage = "Login inválido.";
-        }
-    }
-
-    public class LoginInput
-    {
-        [Required] public string Email { get; set; } = "";
-        [Required] public string Password { get; set; } = "";
-    }
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
 }

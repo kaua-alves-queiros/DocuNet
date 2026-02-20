@@ -8,7 +8,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 
-<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" />
+<MudThemeProvider IsDarkMode="true" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
@@ -91,7 +91,7 @@
                     <MudNavLink OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout">Sair</MudNavLink>
                 </Authorized>
                 <NotAuthorized>
-                    <MudNavLink Match="NavLinkMatch.All" Href="account/login">Entrar</MudNavLink>
+                    <MudNavLink Match="NavLinkMatch.All" Href="/account/login">Entrar</MudNavLink>
                 </NotAuthorized>
             </AuthorizeView>
         </MudNavMenu>
