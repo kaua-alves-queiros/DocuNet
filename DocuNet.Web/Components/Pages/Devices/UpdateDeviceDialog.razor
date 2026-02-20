@@ -1,0 +1,111 @@
+@using DocuNet.Web.Dtos.Device
+@using DocuNet.Web.Enumerators
+@using DocuNet.Web.Services
+@using DocuNet.Web.States
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using System
+@inject DeviceService DeviceService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@inject OrganizationState OrganizationState
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField @bind-Value="name" Label="Nome do Dispositivo" Required="true" RequiredError="Nome é obrigatório." MaxLength="100"/>
+            <MudTextField @bind-Value="ipAddress" Label="Endereço IP" Required="true" RequiredError="IP é obrigatório." MaxLength="50"/>
+            <MudSelect T="EDeviceTypes?" @bind-Value="type" Label="Tipo" Required="true" AnchorOrigin="Origin.BottomCenter">
+                @foreach (EDeviceTypes t in Enum.GetValues(typeof(EDeviceTypes)))
+                {
+                    <MudSelectItem Value="@((EDeviceTypes?)t)">@t.ToString()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!success || _processing)">
+            @if (_processing)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Salvando...</MudText>
+            }
+            else
+            {
+                <MudText>Salvar</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid DeviceId { get; set; }
+    [Parameter] public string CurrentName { get; set; } = string.Empty;
+    [Parameter] public string CurrentIp { get; set; } = string.Empty;
+    [Parameter] public EDeviceTypes CurrentType { get; set; }
+
+    private string name = string.Empty;
+    private string ipAddress = string.Empty;
+    private EDeviceTypes? type;
+
+    private MudForm form = default!;
+    private bool success;
+    private bool _processing;
+
+    protected override void OnInitialized()
+    {
+        name = CurrentName;
+        ipAddress = CurrentIp;
+        type = CurrentType;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await form.Validate();
+        if (form.IsValid)
+        {
+            _processing = true;
+            try
+            {
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+                var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (Guid.TryParse(userIdStr, out var userId))
+                {
+                    // DTO expects nullable updates, so we pass current values if changed, or explicit values.
+                    // Here we simply pass the values bound to the form.
+                    var updateDto = new UpdateDeviceDto(userId, DeviceId, name, ipAddress, type);
+                    var result = await DeviceService.UpdateDeviceAsync(updateDto);
+
+                    if (result.Success)
+                    {
+                        Snackbar.Add(result.Message, Severity.Success);
+                        MudDialog.Close(DialogResult.Ok(true));
+                    }
+                    else
+                    {
+                        Snackbar.Add(result.Message, Severity.Error);
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Erro ao identificar usuário.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erro inesperado: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _processing = false;
+            }
+        }
+    }
+}
