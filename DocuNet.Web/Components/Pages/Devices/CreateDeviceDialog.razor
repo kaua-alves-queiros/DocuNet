@@ -1,8 +1,11 @@
 @using DocuNet.Web.Dtos.Device
 @using DocuNet.Web.Enumerators
+@using DocuNet.Web.Constants
 @using DocuNet.Web.Services
 @using DocuNet.Web.States
 @using System.Security.Claims
+@using System.ComponentModel.DataAnnotations
+@using System.Reflection
 @using Microsoft.AspNetCore.Components.Authorization
 @inject DeviceService DeviceService
 @inject OrganizationState OrganizationState
@@ -17,7 +20,12 @@
             <MudSelect T="EDeviceTypes" @bind-Value="type" Label="Tipo" Required="true" AnchorOrigin="Origin.BottomCenter">
                 @foreach (EDeviceTypes t in Enum.GetValues(typeof(EDeviceTypes)))
                 {
-                    <MudSelectItem Value="@t">@t.ToString()</MudSelectItem>
+                    <MudSelectItem Value="@t">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@DeviceIcons.GetMudIcon(t)" Color="@DeviceIcons.GetColor(t)" Size="Size.Small" />
+                            <MudText>@(t.GetType().GetField(t.ToString())?.GetCustomAttribute<System.ComponentModel.DataAnnotations.DisplayAttribute>()?.Name ?? t.ToString())</MudText>
+                        </MudStack>
+                    </MudSelectItem>
                 }
             </MudSelect>
         </MudForm>

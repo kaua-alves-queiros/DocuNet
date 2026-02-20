@@ -9,6 +9,7 @@
 @using System.Security.Claims
 @using System.ComponentModel.DataAnnotations
 @using System.Reflection
+@using MudBlazor
 @attribute [Authorize]
 @implements IDisposable
 @inject DeviceService DeviceService
@@ -46,7 +47,9 @@ else
                 <MudTd DataLabel="Nome">@context.Name</MudTd>
                 <MudTd DataLabel="Endereço IP">@context.IpAddress</MudTd>
                 <MudTd DataLabel="Tipo">
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@GetDisplayName(context.Type)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="@DeviceIcons.GetColor(context.Type)" Icon="@DeviceIcons.GetMudIcon(context.Type)">
+                        @GetDisplayName(context.Type)
+                    </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Ações" Style="text-align: right">
                     <MudTooltip Text="Editar">
