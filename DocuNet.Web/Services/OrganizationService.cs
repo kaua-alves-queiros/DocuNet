@@ -3,6 +3,7 @@ using DocuNet.Web.Constants;
 using DocuNet.Web.Data;
 using DocuNet.Web.Dtos;
 using DocuNet.Web.Dtos.Organization;
+using DocuNet.Web.Dtos.User;
 using DocuNet.Web.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -291,6 +292,34 @@ namespace DocuNet.Web.Services
             )).ToList();
 
             return new ServiceResultDto<List<OrganizationSummaryDto>>(true, summaries, "Organizações carregadas com sucesso.");
+        }
+
+        /// <summary>
+        /// Obtém a lista de membros de uma organização.
+        /// </summary>
+        public async Task<ServiceResultDto<List<UserSummaryDto>>> GetOrganizationMembersAsync(Guid requesterId, Guid organizationId)
+        {
+            var requester = await userManager.FindByIdAsync(requesterId.ToString());
+            if (requester == null || !await userManager.IsInRoleAsync(requester, SystemRoles.SystemAdministrator) || await userManager.IsLockedOutAsync(requester))
+            {
+                return new ServiceResultDto<List<UserSummaryDto>>(false, [], "Acesso negado.");
+            }
+
+            var organization = await context.Organizations.Include(o => o.Users).FirstOrDefaultAsync(o => o.Id == organizationId);
+            if (organization == null)
+            {
+                return new ServiceResultDto<List<UserSummaryDto>>(false, [], "Organização não encontrada.");
+            }
+
+            var summaries = new List<UserSummaryDto>();
+            foreach (var user in organization.Users)
+            {
+                var roles = (await userManager.GetRolesAsync(user)).ToList();
+                var isLockedOut = await userManager.IsLockedOutAsync(user);
+                summaries.Add(new UserSummaryDto(user.Id, user.Email!, isLockedOut, roles));
+            }
+
+            return new ServiceResultDto<List<UserSummaryDto>>(true, summaries, "Membros carregados com sucesso.");
         }
     }
 }
